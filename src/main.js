@@ -27,12 +27,12 @@ export default {
 };
 
 async function getGraphToken(env) {
-  const res = await fetch("https://login.microsoftonline.com/YOUR_TENANT_ID/oauth2/v2.0/token", {
+  const res = await fetch(env.AUTH_URL, {
     method: "POST",
     headers: { "Content-Type": "application/x-www-form-urlencoded" },
     body: new URLSearchParams({
-      client_id: env.MS_CLIENT_ID,
-      client_secret: env.MS_CLIENT_SECRET,
+      client_id: env.CLIENT_ID,
+      client_secret: env.CLIENT_SECRET,
       scope: "https://graph.microsoft.com/.default",
       grant_type: "client_credentials"
     })
