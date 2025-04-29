@@ -33,8 +33,9 @@ async function getGraphToken(env) {
     body: new URLSearchParams({
       client_id: env.CLIENT_ID,
       client_secret: env.CLIENT_SECRET,
-      scope: "https://graph.microsoft.com/.default",
-      grant_type: "client_credentials"
+      grant_type: 'client_credentials',
+      resource: 'https://graph.microsoft.com',
+      scope: 'https://graphs.microsoft.com/.default'
     })
   });
 
