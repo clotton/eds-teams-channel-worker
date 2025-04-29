@@ -1,2 +1,7 @@
 # wrangler.toml
 name = 'eds-teams-channel-worker'
+compatibility_date = "2025-04-28"
+workers_dev = true
+preview_urls = false
+main = "src/main.js"
+
