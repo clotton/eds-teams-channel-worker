@@ -56,6 +56,28 @@ function parseCsvToJson(csvString) {
   });
 }
 
+// Helper: fetch all members for a team and count members/guests
+async function getTeamMemberCounts(accessToken, teamId) {
+  const url = `https://graph.microsoft.com/v1.0/teams/${teamId}/members`;
+
+  const response = await fetch(url, {
+    method: 'GET',
+    headers: {
+      Authorization: `Bearer ${accessToken}`,
+      Accept: 'application/json',
+    },
+  });
+
+  if (!response.ok) {
+    console.log(`Error fetching team members: ${response.statusText}`);
+    return -1;
+  }
+
+  const data = await response.json();
+
+  return  data.value.length ;
+}
+
 // Main function: fetch, filter, and format Teams activity report
 async function getTeamActivityReport(accessToken, nameFilter = '', descriptionFilter = '') {
   const reportUrl = 'https://graph.microsoft.com/v1.0/reports/getTeamsTeamActivityDetail(period=\'D180\')';
@@ -90,24 +112,28 @@ async function getTeamActivityReport(accessToken, nameFilter = '', descriptionFi
 
   // Filter: name/description matches + team type is 'Public'
   const filtered = jsonData.filter(team => {
-    const name = team['Team Name'] || team['Team Display Name'] || '';
-    const description = team['Team Description'] || '';
     const type = team['Team Type'] || '';
-    return name.toLowerCase().includes(nameFilter.toLowerCase()) &&
-        type.toLowerCase() === 'public';
+    return type.toLowerCase() === 'public';
   });
 
-  // Simplify: keep only selected fields
-  const simplified = filtered.map(team => ({
-    teamId: team['Team Id'],
-    teamName: team['Team Name'] || team['Team Display Name'],
-    lastActivityDate: team['Last Activity Date'],
-    channelMessages: team['Channel Messages'] || team['Number of Channel Messages'],
-    activeChannels: team['Active Channels'],
-    memberCount: team['Active Users'] || team['Number of team members'],
+  // Enrich each team with member counts
+  // Parallel fetch member counts for all teams
+  const results = await Promise.all(filtered.map(async team => {
+    const teamId = team['Team Id'];
+    const memberCountResponse = await getTeamMemberCounts(accessToken, teamId);
+
+    return {
+      teamId: teamId,
+      teamName: team['Team Name'] || team['Team Display Name'],
+      lastActivityDate: team['Last Activity Date'],
+      channelMessages: team['Channel Messages'] || team['Number of Channel Messages'],
+      activeChannels: team['Active Channels'],
+      memberCount: memberCountResponse
+    };
   }));
 
-  return simplified;
+  return results;
+
 }
 
 
