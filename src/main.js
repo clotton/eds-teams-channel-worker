@@ -18,7 +18,7 @@ export default {
           headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' },
         });
       } catch (err) {
-        return new Response(JSON.stringify({ error: 'Failed to fetch all teams' }), {
+        return new Response(JSON.stringify({ error: err }), {
           status: 500,
           headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' },
         });
