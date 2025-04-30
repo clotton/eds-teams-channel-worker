@@ -137,19 +137,28 @@ async function getTeamActivityReport(accessToken, nameFilter = '', descriptionFi
 
   const jsonData = parseCsvToJson(csvData);
 
-  const filtered = jsonData.filter(team => {
+  const lowerName = nameFilter.trim().toLowerCase();
+  const lowerDesc = descriptionFilter.trim().toLowerCase();
+
+  const filteredByName = jsonData.filter(team => {
     const type = team['Team Type']?.toLowerCase() || '';
-    return type === 'public';
+    const name = (team['Team Name'] || '').toLowerCase();
+    const matchesName = !lowerName || name.includes(lowerName);
+    return type === 'public' && matchesName;
   });
 
   // Limit subrequests (e.g., 10 at a time)
   const MAX_CONCURRENT = 10;
 
-  const results = await throttledMap(filtered, MAX_CONCURRENT, async team => {
+  const results = await throttledMap(filteredByName, MAX_CONCURRENT, async team => {
     const teamId = team['Team Id'];
     const teamSummary = await getTeamSummary(accessToken, teamId);
 
     if (!teamSummary || !teamSummary.summary) return null;
+
+    const description = (teamSummary.description || '').toLowerCase();
+    const matchesDescription = !lowerDesc || description.includes(lowerDesc);
+    if (!matchesDescription) return null;
 
     const members = teamSummary.summary.membersCount || 0;
     const guests = teamSummary.summary.guestsCount || 0;
