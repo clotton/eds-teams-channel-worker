@@ -10,26 +10,31 @@ export default {
 
     const token = await getGraphToken(env);
 
-
     if (pathname === '/teams/allTeams' && request.method === 'GET') {
       try {
         const teams = await getTeamActivityReport(token, nameFilter, descriptionFilter);
         return new Response(JSON.stringify(teams), {
-          headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' },
-        });
-      } catch (err) {
-        console.error('Worker error:', err);
-
-        return new Response(JSON.stringify({
-          error: err.message || 'Unknown error',
-          stack: err.stack || '',
-        }), {
-          status: 500,
           headers: {
             'Content-Type': 'application/json',
             'Access-Control-Allow-Origin': '*',
           },
         });
+      } catch (err) {
+        console.error('Worker error:', err);
+
+        return new Response(
+            JSON.stringify({
+              error: err.message || 'Unknown error',
+              stack: err.stack || '',
+            }),
+            {
+              status: 500,
+              headers: {
+                'Content-Type': 'application/json',
+                'Access-Control-Allow-Origin': '*',
+              },
+            }
+        );
       }
     }
 
@@ -37,24 +42,25 @@ export default {
   },
 };
 
+// Get Microsoft Graph token
 async function getGraphToken(env) {
   const res = await fetch(env.AUTH_URL, {
     method: "POST",
-    headers: {"Content-Type": "application/x-www-form-urlencoded"},
+    headers: { "Content-Type": "application/x-www-form-urlencoded" },
     body: new URLSearchParams({
       client_id: env.CLIENT_ID,
       client_secret: env.CLIENT_SECRET,
       grant_type: 'client_credentials',
       resource: 'https://graph.microsoft.com',
-      scope: 'https://graphs.microsoft.com/.default'
-    })
+      scope: 'https://graph.microsoft.com/.default'
+    }),
   });
 
   const json = await res.json();
   return json.access_token;
 }
 
-// Helper: parse CSV to JSON
+// Parse CSV string into JSON
 function parseCsvToJson(csvString) {
   const lines = csvString.trim().split('\n');
   const headers = lines[0].split(',').map(h => h.trim().replace(/^"|"$/g, ''));
@@ -64,7 +70,7 @@ function parseCsvToJson(csvString) {
   });
 }
 
-// Helper: fetch all members for a team and count members/guests
+// Fetch team details from Graph
 async function getTeamSummary(accessToken, teamId) {
   const url = `https://graph.microsoft.com/v1.0/teams/${teamId}`;
 
@@ -77,16 +83,33 @@ async function getTeamSummary(accessToken, teamId) {
   });
 
   if (!response.ok) {
-    console.log(`Error fetching team members: ${response.statusText}`);
-    return -1;
+    console.warn(`Error fetching team ${teamId} summary: ${response.statusText}`);
+    return null;
   }
 
   const data = await response.json();
-
-  return  data ;
+  return data;
 }
 
-// Main function: fetch, filter, and format Teams activity report
+// Throttle concurrent fetches
+async function throttledMap(array, limit, asyncFn) {
+  const results = [];
+  const executing = [];
+
+  for (const item of array) {
+    const p = asyncFn(item).then(result => results.push(result));
+    executing.push(p);
+
+    if (executing.length >= limit) {
+      await Promise.race(executing);
+    }
+  }
+
+  await Promise.allSettled(executing);
+  return results.filter(Boolean);
+}
+
+// Fetch Teams activity and enrich with summaries
 async function getTeamActivityReport(accessToken, nameFilter = '', descriptionFilter = '') {
   const reportUrl = 'https://graph.microsoft.com/v1.0/reports/getTeamsTeamActivityDetail(period=\'D180\')';
 
@@ -98,61 +121,52 @@ async function getTeamActivityReport(accessToken, nameFilter = '', descriptionFi
     },
   });
 
-  if (response.status !== 200) {
+  if (!response.ok) {
     throw new Error(`Error fetching report: ${response.statusText}`);
   }
 
+  const contentType = response.headers.get("Content-Type");
   let csvData;
 
-  // Check if Content-Type is application/octet-stream and handle accordingly
-  const contentType = response.headers.get("Content-Type");
   if (contentType && contentType.includes("application/octet-stream")) {
-    // Use .arrayBuffer() for binary data
     const buffer = await response.arrayBuffer();
     csvData = new TextDecoder("utf-8").decode(buffer);
-    // Now parse the CSV data to JSON
   } else {
-    // If it's text, we can directly use .text()
     csvData = await response.text();
   }
 
   const jsonData = parseCsvToJson(csvData);
 
-  // Filter: name/description matches + team type is 'Public'
   const filtered = jsonData.filter(team => {
-    const type = team['Team Type'] || '';
-    return type.toLowerCase() === 'public';
+    const type = team['Team Type']?.toLowerCase() || '';
+    return type === 'public';
   });
 
-  // Enrich each team with member counts
-  // Parallel fetch member counts for all teams
-  const results = await Promise.all(filtered.map(async team => {
+  // Limit subrequests (e.g., 10 at a time)
+  const MAX_CONCURRENT = 10;
+
+  const results = await throttledMap(filtered, MAX_CONCURRENT, async team => {
     const teamId = team['Team Id'];
     const teamSummary = await getTeamSummary(accessToken, teamId);
 
-    if (teamSummary === -1) {
-      return null; // Skip this team if there's an error fetching the summary
-    }
+    if (!teamSummary || !teamSummary.summary) return null;
 
-    const totalMembers = teamSummary.summary.guestsCount + teamSummary.summary.membersCount;
+    const members = teamSummary.summary.membersCount || 0;
+    const guests = teamSummary.summary.guestsCount || 0;
+    const total = members + guests;
 
     return {
-      teamId: teamId,
+      teamId,
       teamName: team['Team Name'] || '',
       description: teamSummary.description || '',
       created: teamSummary.createdDateTime,
       lastActivityDate: team['Last Activity Date'],
       messageCount: team['Channel Messages'],
       activeChannels: team['Active Channels'],
-      memberCount: totalMembers,
+      memberCount: total,
       webUrl: teamSummary.webUrl || '',
     };
-  }));
+  });
 
   return results;
-
 }
-
-
-
-
