@@ -18,9 +18,17 @@ export default {
           headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' },
         });
       } catch (err) {
-        return new Response(JSON.stringify({ error: err }), {
+        console.error('Worker error:', err);
+
+        return new Response(JSON.stringify({
+          error: err.message || 'Unknown error',
+          stack: err.stack || '',
+        }), {
           status: 500,
-          headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' },
+          headers: {
+            'Content-Type': 'application/json',
+            'Access-Control-Allow-Origin': '*',
+          },
         });
       }
     }
