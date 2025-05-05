@@ -1,3 +1,5 @@
+import {getUserTeams, addRemoveUserToTeams} from "./api";
+
 export default {
   async fetch(request, env) {
     const url = new URL(request.url);
@@ -11,8 +13,75 @@ export default {
     }
 
     const token = await getGraphToken(env);
+    if( pathname === '/teams/addRemoveTeamMember' && request.method === 'POST') {
+          const body = await request.json();
+          console.log('Received body', body);
+          try {
+              const emailId = searchParams.get('emailId');
+              if (!emailId) {
+                  return new Response('Email ID is required', { status: 400 });
+              }
+              const result = await addRemoveUserToTeams(emailId, body, token);
+              console.log('result:', result);
+              return new Response(JSON.stringify(result), {
+                  headers: {
+                      'Content-Type': 'application/json',
+                      'Access-Control-Allow-Origin': '*',
+                  },
+              });
+          } catch (err) {
+              console.error('Worker error:', err);
 
-    if (pathname === '/teams/allTeams' && request.method === 'GET') {
+              return new Response(
+                  JSON.stringify({
+                      error: err.message || 'Unknown error',
+                      stack: err.stack || '',
+                  }),
+                  {
+                      status: 500,
+                      headers: {
+                          'Content-Type': 'application/json',
+                          'Access-Control-Allow-Origin': '*',
+                      },
+                  }
+              );
+          }
+      }
+      else if (pathname === '/teams/userTeams' && request.method === 'GET') {
+          const emailId = searchParams.get('emailId');
+          if (!emailId) {
+              return new Response('Email ID is required', { status: 400 });
+          }
+
+          try {
+              const teams = await getUserTeams(emailId,token);
+
+              return new Response(JSON.stringify(teams), {
+                  headers: {
+                      'Content-Type': 'application/json',
+                      'Access-Control-Allow-Origin': '*',
+                  },
+              });
+          } catch (err) {
+              console.error('Worker error:', err);
+
+              return new Response(
+                  JSON.stringify({
+                      error: err.message || 'Unknown error',
+                      stack: err.stack || '',
+                  }),
+                  {
+                      status: 500,
+                      headers: {
+                          'Content-Type': 'application/json',
+                          'Access-Control-Allow-Origin': '*',
+                      },
+                  }
+              );
+          }
+      }
+
+      if (pathname === '/teams/allTeams' && request.method === 'GET') {
       try {
         const teams = await getTeamActivityReport(token, nameFilter, descriptionFilter);
         console.log(`Fetched ${teams.length} teams`);
