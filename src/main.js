@@ -6,6 +6,10 @@ export default {
     const nameFilter = searchParams.get("nameFilter") || '';
     const descriptionFilter = searchParams.get("descriptionFilter") || '';
 
+    if (request.method === 'OPTIONS') {
+      return new Response(null, { status: 204, headers: corsHeaders() });
+    }
+
     const token = await getGraphToken(env);
 
     if (pathname === '/teams/allTeams' && request.method === 'GET') {
@@ -36,37 +40,60 @@ export default {
       }
     }
 
+    // Handle /teams/summary route
+    if (pathname === '/teams/summary' && request.method === 'POST') {
+      try {
+        const requestBody = await request.json();
+        const teamIds = requestBody.teamIds || [];
+
+        if (!Array.isArray(teamIds) || teamIds.length === 0) {
+          return new Response(
+              JSON.stringify({ error: 'No team IDs provided' }),
+              { status: 400, headers: { 'Content-Type': 'application/json' } }
+          );
+        }
+
+        const teamSummaries = await Promise.all(teamIds.map(async (teamId) => {
+          const teamSummary = await getTeamSummary(token, teamId);
+          if (!teamSummary) {
+            console.warn(`Error fetching team summary for ${teamId}`);
+            return null;
+          }
+
+          const totalMembers = teamSummary.summary.guestsCount + teamSummary.summary.membersCount;
+
+          return {
+            teamId,
+            teamName: teamSummary.displayName || '',
+            description: teamSummary.description || '',
+            created: teamSummary.createdDateTime,
+            memberCount: totalMembers,
+            webUrl: teamSummary.webUrl || '',
+          };
+        }));
+
+        // Filter out any null results (in case of errors fetching some summaries)
+        const validSummaries = teamSummaries.filter(summary => summary !== null);
+
+        return new Response(JSON.stringify(validSummaries), {
+          headers: {
+            'Content-Type': 'application/json',
+            'Access-Control-Allow-Origin': '*',
+          },
+        });
+
+      } catch (err) {
+        console.error('Error in /teams/summary:', err);
+        return new Response(
+            JSON.stringify({ error: 'Failed to fetch team summaries', details: err.message }),
+            { status: 500, headers: { 'Content-Type': 'application/json' } }
+        );
+      }
+    }
+
     return new Response('Not Found', { status: 404 });
   },
 };
-
-// Get Microsoft Graph token
-async function getGraphToken(env) {
-  const res = await fetch(env.AUTH_URL, {
-    method: "POST",
-    headers: { "Content-Type": "application/x-www-form-urlencoded" },
-    body: new URLSearchParams({
-      client_id: env.CLIENT_ID,
-      client_secret: env.CLIENT_SECRET,
-      grant_type: 'client_credentials',
-      resource: 'https://graph.microsoft.com',
-      scope: 'https://graph.microsoft.com/.default'
-    }),
-  });
-
-  const json = await res.json();
-  return json.access_token;
-}
-
-// Parse CSV string into JSON
-function parseCsvToJson(csvString) {
-  const lines = csvString.trim().split('\n');
-  const headers = lines[0].split(',').map(h => h.trim().replace(/^"|"$/g, ''));
-  return lines.slice(1).map(line => {
-    const values = line.split(',').map(v => v.trim().replace(/^"|"$/g, ''));
-    return Object.fromEntries(headers.map((h, i) => [h, values[i]]));
-  });
-}
 
 // Fetch team details from Graph
 async function getTeamSummary(accessToken, teamId) {
@@ -89,52 +116,8 @@ async function getTeamSummary(accessToken, teamId) {
   return data;
 }
 
-// Throttle concurrent fetches with tracking
-let subrequestCount = 0;
-const SUBREQUEST_LIMIT = 50;
-
-async function throttledMap(array, limit, asyncFn) {
-  console.log(`Starting throttledMap with ${array.length} items`);
-  const results = [];
-  const executing = [];
-
-  for (const [index, item] of array.entries()) {
-    if (subrequestCount >= SUBREQUEST_LIMIT) {
-      console.warn(`Subrequest limit reached at index ${index} (limit: ${SUBREQUEST_LIMIT})`);
-      return new Response("Subrequest limit exceeded", { status: 429 });
-    }
-
-    console.log(`Processing item ${index + 1}/${array.length}`);
-
-    const p = asyncFn(item)
-    .then(result => {
-      console.log(`Finished item ${index + 1}, result:`, result);
-      results.push(result);
-      subrequestCount++;
-    })
-    .catch(err => {
-      console.error(`Error processing item ${index + 1}:`, err);
-    });
-
-    executing.push(p);
-
-    if (executing.length >= limit) {
-      console.log(`Concurrency limit (${limit}) reached, waiting...`);
-      await Promise.race(executing);
-    }
-  }
-
-  console.log("Waiting for remaining promises to settle...");
-  await Promise.allSettled(executing);
-  console.log(`All done. Total successful results: ${results.length}`);
-
-  return results.filter(Boolean);
-}
-
-
 // Fetch Teams activity and enrich with summaries
-async function getTeamActivityReport(accessToken, nameFilter = '', descriptionFilter = '') {
-
+async function getTeamActivityReport(accessToken, nameFilter, descriptionFilter) {
   const reportUrl = 'https://graph.microsoft.com/v1.0/reports/getTeamsTeamActivityDetail(period=\'D180\')';
 
   const response = await fetch(reportUrl, {
@@ -145,13 +128,13 @@ async function getTeamActivityReport(accessToken, nameFilter = '', descriptionFi
     },
   });
 
-  if (!response.ok) {
+  if (response.status !== 200) {
     throw new Error(`Error fetching report: ${response.statusText}`);
   }
 
-  const contentType = response.headers.get("Content-Type");
   let csvData;
 
+  const contentType = response.headers.get("Content-Type");
   if (contentType && contentType.includes("application/octet-stream")) {
     const buffer = await response.arrayBuffer();
     csvData = new TextDecoder("utf-8").decode(buffer);
@@ -161,47 +144,95 @@ async function getTeamActivityReport(accessToken, nameFilter = '', descriptionFi
 
   const jsonData = parseCsvToJson(csvData);
 
-  const lowerName = nameFilter.trim().toLowerCase();
-  const lowerDesc = descriptionFilter.trim().toLowerCase();
+  // Apply the filters based on name and description
+  const filtered = jsonData.filter(team => {
+    const type = team['teamType'] || '';
+    const teamName = team['teamName'] || '';
 
-  const filteredByName = jsonData.filter(team => {
-    const type = team['Team Type']?.toLowerCase() || '';
-    const name = (team['Team Name'] || '').toLowerCase();
-    const matchesName = !lowerName || name.includes(lowerName);
-    return type === 'public' && matchesName;
+    const matchesNameFilter = teamName.toLowerCase().includes(nameFilter.toLowerCase());
+
+    return type.toLowerCase() === 'public' && matchesNameFilter;
   });
 
-  console.log(`Filtered by Name: ${filteredByName.length} teams`);
+  const allTeams = await getAllTeams(accessToken, nameFilter, descriptionFilter);
 
-  // Limit subrequests (e.g., 10 at a time)
-  const MAX_CONCURRENT = 10;
+  const mergedTeams = mergeTeamsById(filtered, allTeams);
 
-  const results = await throttledMap(filteredByName, MAX_CONCURRENT, async team => {
-    const teamId = team['Team Id'];
-    const teamSummary = await getTeamSummary(accessToken, teamId);
-
-    if (!teamSummary || !teamSummary.summary) return null;
-
-    const description = (teamSummary.description || '').toLowerCase();
-    const matchesDescription = !lowerDesc || description.includes(lowerDesc);
-    if (!matchesDescription) return null;
-
-    const members = teamSummary.summary.membersCount || 0;
-    const guests = teamSummary.summary.guestsCount || 0;
-    const total = members + guests;
-
-    return {
-      teamId,
-      teamName: team['Team Name'] || '',
-      description: teamSummary.description || '',
-      created: teamSummary.createdDateTime,
-      lastActivityDate: team['Last Activity Date'],
-      messageCount: team['Channel Messages'],
-      activeChannels: team['Active Channels'],
-      memberCount: total,
-      webUrl: teamSummary.webUrl || '',
-    };
-  });
-
-  return results;
+  return mergedTeams;
 }
+
+function mergeTeamsById(filtered, allTeams) {
+  const allTeamsMap = new Map(allTeams.map(team => [team.id, team]));  // Use 'id' for allTeams
+
+  return filtered
+  .filter(team => allTeamsMap.has(team.teamId))  // Use 'teamId' for filtered
+  .map(team => ({
+    ...team,
+    ...allTeamsMap.get(team.teamId),  // Merge using teamId from filtered
+  }));
+}
+
+// Helper: Convert string to camelCase
+function toCamelCase(str) {
+  return str
+  .toLowerCase()
+  .replace(/[^a-z0-9]+(.)/g, (_, chr) => chr.toUpperCase());
+}
+
+// Parse CSV string into JSON with camelCase keys
+function parseCsvToJson(csvString) {
+  const lines = csvString.trim().split('\n');
+  const rawHeaders = lines[0].split(',').map(h => h.trim().replace(/^"|"$/g, ''));
+  const headers = rawHeaders.map(toCamelCase);  // Apply camelCase conversion here
+
+  return lines.slice(1).map(line => {
+    const values = line.split(',').map(v => v.trim().replace(/^"|"$/g, ''));
+    return Object.fromEntries(headers.map((h, i) => [h, values[i]]));
+  });
+}
+
+// Get Microsoft Graph token
+async function getGraphToken(env) {
+  const res = await fetch(env.AUTH_URL, {
+    method: "POST",
+    headers: { "Content-Type": "application/x-www-form-urlencoded" },
+    body: new URLSearchParams({
+      client_id: env.CLIENT_ID,
+      client_secret: env.CLIENT_SECRET,
+      grant_type: 'client_credentials',
+      resource: 'https://graph.microsoft.com',
+      scope: 'https://graph.microsoft.com/.default'
+    }),
+  });
+
+  const json = await res.json();
+  return json.access_token;
+}
+
+const getAllTeams = async (accessToken, nameFilter = '', descriptionFilter = '') => {
+  const url = `https://graph.microsoft.com/v1.0/teams`;
+  const response = await fetch(url, {
+    method: 'GET',
+    headers: {
+      Authorization: `Bearer ${accessToken}`,
+      Accept: 'application/json',
+    },
+  });
+
+  if (!response.ok) return response;
+
+  const json = await response.json();
+
+  return json.value || [];
+};
+
+function corsHeaders() {
+  return {
+    'Access-Control-Allow-Origin': '*',
+    'Access-Control-Allow-Methods': 'GET, OPTIONS',
+    'Access-Control-Allow-Headers': 'Authorization, Content-Type'
+  };
+}
+
+
+
