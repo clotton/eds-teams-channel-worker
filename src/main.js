@@ -94,29 +94,43 @@ let subrequestCount = 0;
 const SUBREQUEST_LIMIT = 50;
 
 async function throttledMap(array, limit, asyncFn) {
+  console.log(`Starting throttledMap with ${array.length} items`);
   const results = [];
   const executing = [];
 
-  for (const item of array) {
+  for (const [index, item] of array.entries()) {
     if (subrequestCount >= SUBREQUEST_LIMIT) {
-      console.log("429 Encountered);")
+      console.warn(`Subrequest limit reached at index ${index} (limit: ${SUBREQUEST_LIMIT})`);
       return new Response("Subrequest limit exceeded", { status: 429 });
     }
 
-    const p = asyncFn(item).then(result => {
+    console.log(`Processing item ${index + 1}/${array.length}`);
+
+    const p = asyncFn(item)
+    .then(result => {
+      console.log(`Finished item ${index + 1}, result:`, result);
       results.push(result);
-      subrequestCount++; // Increment count for each subrequest
+      subrequestCount++;
+    })
+    .catch(err => {
+      console.error(`Error processing item ${index + 1}:`, err);
     });
+
     executing.push(p);
 
     if (executing.length >= limit) {
+      console.log(`Concurrency limit (${limit}) reached, waiting...`);
       await Promise.race(executing);
     }
   }
 
+  console.log("Waiting for remaining promises to settle...");
   await Promise.allSettled(executing);
+  console.log(`All done. Total successful results: ${results.length}`);
+
   return results.filter(Boolean);
 }
+
 
 // Fetch Teams activity and enrich with summaries
 async function getTeamActivityReport(accessToken, nameFilter = '', descriptionFilter = '') {
