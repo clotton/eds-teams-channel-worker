@@ -11,6 +11,7 @@ export default {
     if (pathname === '/teams/allTeams' && request.method === 'GET') {
       try {
         const teams = await getTeamActivityReport(token, nameFilter, descriptionFilter);
+        console.log(`Fetched ${teams.length} teams`);
         return new Response(JSON.stringify(teams), {
           headers: {
             'Content-Type': 'application/json',
@@ -98,6 +99,7 @@ async function throttledMap(array, limit, asyncFn) {
 
   for (const item of array) {
     if (subrequestCount >= SUBREQUEST_LIMIT) {
+      console.log("429 Encountered);")
       return new Response("Subrequest limit exceeded", { status: 429 });
     }
 
