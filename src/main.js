@@ -157,6 +157,8 @@ async function getTeamActivityReport(accessToken, nameFilter = '', descriptionFi
     return type === 'public' && matchesName;
   });
 
+  console.log("Filtered by Name: ${filteredByName.length} teams");
+
   // Limit subrequests (e.g., 10 at a time)
   const MAX_CONCURRENT = 10;
 
