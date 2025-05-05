@@ -1,5 +1,3 @@
-// Cloudflare Worker backend for Microsoft Teams with rate limiting handling
-
 export default {
   async fetch(request, env) {
     const url = new URL(request.url);
@@ -21,7 +19,6 @@ export default {
         });
       } catch (err) {
         console.error('Worker error:', err);
-
         return new Response(
             JSON.stringify({
               error: err.message || 'Unknown error',
@@ -91,13 +88,23 @@ async function getTeamSummary(accessToken, teamId) {
   return data;
 }
 
-// Throttle concurrent fetches
+// Throttle concurrent fetches with tracking
+let subrequestCount = 0;
+const SUBREQUEST_LIMIT = 50;
+
 async function throttledMap(array, limit, asyncFn) {
   const results = [];
   const executing = [];
 
   for (const item of array) {
-    const p = asyncFn(item).then(result => results.push(result));
+    if (subrequestCount >= SUBREQUEST_LIMIT) {
+      return new Response("Subrequest limit exceeded", { status: 429 });
+    }
+
+    const p = asyncFn(item).then(result => {
+      results.push(result);
+      subrequestCount++; // Increment count for each subrequest
+    });
     executing.push(p);
 
     if (executing.length >= limit) {
@@ -111,6 +118,7 @@ async function throttledMap(array, limit, asyncFn) {
 
 // Fetch Teams activity and enrich with summaries
 async function getTeamActivityReport(accessToken, nameFilter = '', descriptionFilter = '') {
+
   const reportUrl = 'https://graph.microsoft.com/v1.0/reports/getTeamsTeamActivityDetail(period=\'D180\')';
 
   const response = await fetch(reportUrl, {
