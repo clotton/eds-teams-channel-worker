@@ -24,10 +24,7 @@ export default {
               const result = await addRemoveUserToTeams(emailId, body, token);
               console.log('result:', result);
               return new Response(JSON.stringify(result), {
-                  headers: {
-                      'Content-Type': 'application/json',
-                      'Access-Control-Allow-Origin': '*',
-                  },
+                  headers: corsHeaders(),
               });
           } catch (err) {
               console.error('Worker error:', err);
