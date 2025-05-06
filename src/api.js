@@ -225,7 +225,7 @@ const addRemoveUserToTeams = async (email, body, bearer) => {
 
   await asyncForEach(body.remove, async (id) => {
     console.log('Removing from team ID:', id);
-    const team = await getTeam(id, bearer);
+    const team = await getTeamById(id, bearer);
     console.log('team:', team);
 
     if (team) {
