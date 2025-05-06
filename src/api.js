@@ -33,13 +33,13 @@ const getUser = async (email, bearer) => {
   return null;
 };
 
-const getUserTeams = async (id,bearer) => {
-  const user = await getUser(id,bearer);
+const getUserTeams = async (data) => {
+  const user = await getUser(data.id, data.bearer);
   if (!user) return null;
 
   const headers = {
     ConsistencyLevel: 'eventual',
-    Authorization: `Bearer ${bearer}`,
+    Authorization: `Bearer ${data.bearer}`,
   };
 
   const url = `https://graph.microsoft.com/v1.0/users/${user.id}/joinedTeams`

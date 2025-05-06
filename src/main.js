@@ -1,4 +1,18 @@
+import {CORS_HEADERS} from "./constants";
 import {getUserTeams, addRemoveUserToTeams} from "./api";
+
+const jsonToResponse = async (request, data, fct, env) => {
+  const json = await fct(data);
+  if (json) {
+    return new Response(JSON.stringify(json), {
+      headers: CORS_HEADERS(env),
+    });
+  }
+  return new Response('Not found', {
+    status: 404,
+    headers: CORS_HEADERS(env),
+  });
+}
 
 export default {
   async fetch(request, env) {
@@ -9,9 +23,12 @@ export default {
     const descriptionFilter = searchParams.get("descriptionFilter") || '';
 
     if (request.method === 'OPTIONS') {
-      return new Response(null, { status: 204, headers: corsHeaders() });
+      return new Response(null, { status: 204, headers: CORS_HEADERS(env)});
     }
-
+    let action;
+    const data = {
+      method: request.method,
+    };
     const token = await getGraphToken(env);
     if( pathname === '/teams/addRemoveTeamMember' && request.method === 'POST') {
           const body = await request.json();
@@ -24,7 +41,7 @@ export default {
               const result = await addRemoveUserToTeams(emailId, body, token);
               console.log('result:', result);
               return new Response(JSON.stringify(result), {
-                  headers: corsHeaders(),
+                  headers: CORS_HEADERS(env),
               });
           } catch (err) {
               console.error('Worker error:', err);
@@ -36,10 +53,7 @@ export default {
                   }),
                   {
                       status: 500,
-                      headers: {
-                          'Content-Type': 'application/json',
-                          'Access-Control-Allow-Origin': '*',
-                      },
+                      headers:CORS_HEADERS(env),
                   }
               );
           }
@@ -49,33 +63,10 @@ export default {
           if (!emailId) {
               return new Response('Email ID is required', { status: 400 });
           }
+            data.id = emailId;
+            data.bearer = token;
 
-          try {
-              const teams = await getUserTeams(emailId,token);
-
-              return new Response(JSON.stringify(teams), {
-                  headers: {
-                      'Content-Type': 'application/json',
-                      'Access-Control-Allow-Origin': '*',
-                  },
-              });
-          } catch (err) {
-              console.error('Worker error:', err);
-
-              return new Response(
-                  JSON.stringify({
-                      error: err.message || 'Unknown error',
-                      stack: err.stack || '',
-                  }),
-                  {
-                      status: 500,
-                      headers: {
-                          'Content-Type': 'application/json',
-                          'Access-Control-Allow-Origin': '*',
-                      },
-                  }
-              );
-          }
+             return jsonToResponse(request, data, getUserTeams, env);
       }
 
       if (pathname === '/teams/allTeams' && request.method === 'GET') {
@@ -83,10 +74,7 @@ export default {
         const teams = await getTeamActivityReport(token, nameFilter, descriptionFilter);
         console.log(`Fetched ${teams.length} teams`);
         return new Response(JSON.stringify(teams), {
-          headers: {
-            'Content-Type': 'application/json',
-            'Access-Control-Allow-Origin': '*',
-          },
+          headers: CORS_HEADERS(env),
         });
       } catch (err) {
         console.error('Worker error:', err);
@@ -97,10 +85,7 @@ export default {
             }),
             {
               status: 500,
-              headers: {
-                'Content-Type': 'application/json',
-                'Access-Control-Allow-Origin': '*',
-              },
+              headers: CORS_HEADERS(env),
             }
         );
       }
@@ -292,13 +277,6 @@ const getAllTeams = async (accessToken, nameFilter = '', descriptionFilter = '')
   return json.value || [];
 };
 
-function corsHeaders() {
-  return {
-    'Access-Control-Allow-Origin': '*',
-    'Access-Control-Allow-Methods': 'GET, OPTIONS',
-    'Access-Control-Allow-Headers': 'Authorization, Content-Type'
-  };
-}
 
 
 
