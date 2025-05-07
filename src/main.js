@@ -195,21 +195,24 @@ async function getTeamActivityReport(accessToken, nameFilter, descriptionFilter)
 
   const jsonData = parseCsvToJson(csvData);
 
-  // Apply the filters based on name and description
-  const filtered = jsonData.filter(team => {
+  const filteredbyName = jsonData.filter(team => {
     const type = team['teamType'] || '';
     const teamName = team['teamName'] || '';
-
     const matchesNameFilter = teamName.toLowerCase().includes(nameFilter.toLowerCase());
-
     return type.toLowerCase() === 'public' && matchesNameFilter;
   });
 
   const allTeams = await getAllTeams(accessToken, nameFilter, descriptionFilter);
 
-  const mergedTeams = mergeTeamsById(filtered, allTeams);
+  const mergedTeams = mergeTeamsById(filteredbyName, allTeams);
 
-  return mergedTeams;
+  const filteredbyNameDescription = mergedTeams.filter(team => {
+    const teamDesc = team['description'] || '';
+    const matchesDescFilter = teamDesc.toLowerCase().includes(descriptionFilter.toLowerCase());
+    return matchesDescFilter;
+  });
+
+  return filteredbyNameDescription;
 }
 
 function mergeTeamsById(filtered, allTeams) {
