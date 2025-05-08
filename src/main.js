@@ -36,7 +36,7 @@ export default {
           try {
               const emailId = searchParams.get('emailId');
               if (!emailId) {
-                  return new Response('Email ID is required', { status: 400 });
+                  return new Response('Email ID is required', { status: 400, headers: CORS_HEADERS(env) });
               }
               const result = await addRemoveUserToTeams(emailId, body, token);
               console.log('result:', result);
@@ -53,7 +53,7 @@ export default {
                   }),
                   {
                       status: 500,
-                      headers:CORS_HEADERS(env),
+                      headers:CORS_HEADERS(env)
                   }
               );
           }
@@ -61,7 +61,7 @@ export default {
       else if (pathname === '/teams/userTeams' && request.method === 'GET') {
           const emailId = searchParams.get('emailId');
           if (!emailId) {
-              return new Response('Email ID is required', { status: 400 });
+              return new Response('Email ID is required', { status: 400, headers: CORS_HEADERS(env) });
           }
             data.id = emailId;
             data.bearer = token;
@@ -74,7 +74,7 @@ export default {
         const teams = await getFilteredTeams(token, nameFilter, descriptionFilter);
         console.log(`Fetched ${teams.length} teams`);
         return new Response(JSON.stringify(teams), {
-          headers: CORS_HEADERS(env),
+          headers: CORS_HEADERS(env)
         });
       } catch (err) {
         console.error('Worker error:', err);
@@ -85,7 +85,7 @@ export default {
             }),
             {
               status: 500,
-              headers: CORS_HEADERS(env),
+              headers: CORS_HEADERS(env)
             }
         );
       }
@@ -129,7 +129,7 @@ export default {
         const validSummaries = teamSummaries.filter(summary => summary !== null);
 
         return new Response(JSON.stringify(validSummaries), {
-            headers: CORS_HEADERS(env),
+            headers: CORS_HEADERS(env)
         });
 
       } catch (err) {
