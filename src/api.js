@@ -139,31 +139,22 @@ const getTeamMembers = async (data) => {
   return null;
 }
 
-const getAllTeams = async (data) => {
-  const headers = {
-    Authorization: `Bearer ${data.bearer}`,
-  };
-
+const getAllTeams = async (accessToken, nameFilter = '', descriptionFilter = '') => {
   const url = `https://graph.microsoft.com/v1.0/teams`;
-
-  const res = await fetch(url, {
+  const response = await fetch(url, {
     method: 'GET',
-    headers,
+    headers: {
+      Authorization: `Bearer ${accessToken}`,
+      Accept: 'application/json',
+    },
   });
 
-  const json = await res.json();
-  if (json && json.value) {
-    return json.value.filter(o => o.visibility !== 'private').map(o => {
-      return {
-        id: o.id,
-        displayName: o.displayName,
-        description: o.description,
-      };
-    });
-  }
+  if (!response.ok) return response;
 
-  return null;
-}
+  const json = await response.json();
+
+  return json.value || [];
+};
 
 const asyncForEach = async (array, callback) => {
   for (let index = 0; index < array.length; index++) {

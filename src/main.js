@@ -1,5 +1,5 @@
-import {CORS_HEADERS} from "./constants";
-import {getUserTeams, addRemoveUserToTeams} from "./api";
+import { CORS_HEADERS } from "./constants";
+import { getUserTeams, addRemoveUserToTeams, getAllTeams } from "./api";
 
 const jsonToResponse = async (request, data, fct, env) => {
   const json = await fct(data);
@@ -71,7 +71,7 @@ export default {
 
       if (pathname === '/teams/allTeams' && request.method === 'GET') {
       try {
-        const teams = await getTeamActivityReport(token, nameFilter, descriptionFilter);
+        const teams = await getFilteredTeams(token, nameFilter, descriptionFilter);
         console.log(`Fetched ${teams.length} teams`);
         return new Response(JSON.stringify(teams), {
           headers: CORS_HEADERS(env),
@@ -167,52 +167,21 @@ async function getTeamSummary(accessToken, teamId) {
   return data;
 }
 
-// Fetch Teams activity and enrich with summaries
-async function getTeamActivityReport(accessToken, nameFilter, descriptionFilter) {
-  const reportUrl = 'https://graph.microsoft.com/v1.0/reports/getTeamsTeamActivityDetail(period=\'D180\')';
+/// Fetch Teams using only getAllTeams and apply filters
+async function getFilteredTeams(accessToken, nameFilter, descriptionFilter) {
+  let allTeams = await getAllTeams(accessToken, nameFilter, descriptionFilter);
 
-  const response = await fetch(reportUrl, {
-    method: 'GET',
-    headers: {
-      Authorization: `Bearer ${accessToken}`,
-      Accept: 'text/csv',
-    },
+  // Only keep public teams
+  allTeams = allTeams?.filter(o => o.visibility !== 'private');
+
+  const filteredTeams = allTeams.filter(team => {
+    const name = team.displayName?.toLowerCase() || '';
+    const desc = team.description?.toLowerCase() || '';
+    return name.includes(nameFilter.toLowerCase()) &&
+        desc.includes(descriptionFilter.toLowerCase());
   });
 
-  if (response.status !== 200) {
-    throw new Error(`Error fetching report: ${response.statusText}`);
-  }
-
-  let csvData;
-
-  const contentType = response.headers.get("Content-Type");
-  if (contentType && contentType.includes("application/octet-stream")) {
-    const buffer = await response.arrayBuffer();
-    csvData = new TextDecoder("utf-8").decode(buffer);
-  } else {
-    csvData = await response.text();
-  }
-
-  const jsonData = parseCsvToJson(csvData);
-
-  const filteredbyName = jsonData.filter(team => {
-    const type = team['teamType'] || '';
-    const teamName = team['teamName'] || '';
-    const matchesNameFilter = teamName.toLowerCase().includes(nameFilter.toLowerCase());
-    return type.toLowerCase() === 'public' && matchesNameFilter;
-  });
-
-  const allTeams = await getAllTeams(accessToken, nameFilter, descriptionFilter);
-
-  const mergedTeams = mergeTeamsById(filteredbyName, allTeams);
-
-  const filteredbyNameDescription = mergedTeams.filter(team => {
-    const teamDesc = team['description'] || '';
-    const matchesDescFilter = teamDesc.toLowerCase().includes(descriptionFilter.toLowerCase());
-    return matchesDescFilter;
-  });
-
-  return filteredbyNameDescription;
+  return filteredTeams;
 }
 
 function mergeTeamsById(filtered, allTeams) {
@@ -233,18 +202,6 @@ function toCamelCase(str) {
   .replace(/[^a-z0-9]+(.)/g, (_, chr) => chr.toUpperCase());
 }
 
-// Parse CSV string into JSON with camelCase keys
-function parseCsvToJson(csvString) {
-  const lines = csvString.trim().split('\n');
-  const rawHeaders = lines[0].split(',').map(h => h.trim().replace(/^"|"$/g, ''));
-  const headers = rawHeaders.map(toCamelCase);  // Apply camelCase conversion here
-
-  return lines.slice(1).map(line => {
-    const values = line.split(',').map(v => v.trim().replace(/^"|"$/g, ''));
-    return Object.fromEntries(headers.map((h, i) => [h, values[i]]));
-  });
-}
-
 // Get Microsoft Graph token
 async function getGraphToken(env) {
   const res = await fetch(env.AUTH_URL, {
@@ -262,23 +219,6 @@ async function getGraphToken(env) {
   const json = await res.json();
   return json.access_token;
 }
-
-const getAllTeams = async (accessToken, nameFilter = '', descriptionFilter = '') => {
-  const url = `https://graph.microsoft.com/v1.0/teams`;
-  const response = await fetch(url, {
-    method: 'GET',
-    headers: {
-      Authorization: `Bearer ${accessToken}`,
-      Accept: 'application/json',
-    },
-  });
-
-  if (!response.ok) return response;
-
-  const json = await response.json();
-
-  return json.value || [];
-};
 
 
 
