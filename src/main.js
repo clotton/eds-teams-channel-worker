@@ -100,7 +100,7 @@ export default {
         if (!Array.isArray(teamIds) || teamIds.length === 0) {
           return new Response(
               JSON.stringify({ error: 'No team IDs provided' }),
-              { status: 400, headers: { 'Content-Type': 'application/json' } }
+              { status: 400,  headers: CORS_HEADERS(env)}
           );
         }
 
@@ -129,17 +129,14 @@ export default {
         const validSummaries = teamSummaries.filter(summary => summary !== null);
 
         return new Response(JSON.stringify(validSummaries), {
-          headers: {
-            'Content-Type': 'application/json',
-            'Access-Control-Allow-Origin': '*',
-          },
+            headers: CORS_HEADERS(env),
         });
 
       } catch (err) {
         console.error('Error in /teams/summary:', err);
         return new Response(
             JSON.stringify({ error: 'Failed to fetch team summaries', details: err.message }),
-            { status: 500, headers: { 'Content-Type': 'application/json' } }
+            { status: 500, headers: CORS_HEADERS(env), }
         );
       }
     }
