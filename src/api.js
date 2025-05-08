@@ -404,6 +404,58 @@ const createTeam = async (data) => {
   return null;
 };
 
+async function getTotalTeamMessages(accessToken, teamId) {
+  const headers = { Authorization: `Bearer ${accessToken}` };
+  const channelsRes = await fetch(`https://graph.microsoft.com/v1.0/teams/${teamId}/channels`, { headers });
+
+  if (!channelsRes.ok) return { count: 0, latestMessageDate: null };
+
+  const channels = (await channelsRes.json()).value || [];
+
+  const results = await Promise.all(channels.map(async (channel) => {
+    let count = 0;
+    let latest = null;
+    let url = `https://graph.microsoft.com/v1.0/teams/${teamId}/channels/${channel.id}/messages`;
+
+    while (url) {
+      const res = await fetch(url, { headers });
+      if (!res.ok) break;
+
+      const data = await res.json();
+      const messages = data.value || [];
+      count += messages.filter(msg => msg.from?.user).length; // Only count human messages
+
+      // Track the latest message date
+      for (const msg of messages) {
+        const ts = msg.lastModifiedDateTime || msg.createdDateTime;
+        if (msg.from?.user && (!latest || ts > latest)) {
+          latest = ts;
+        }
+      }
+
+      url = data['@odata.nextLink'];
+    }
+
+    return { count, latest };
+  }));
+
+  let totalCount = 0;
+  let globalLatest = null;
+
+  for (const r of results) {
+    totalCount += r.count;
+    if (!globalLatest || (r.latest && r.latest > globalLatest)) {
+      globalLatest = r.latest;
+    }
+  }
+
+  const trimmedDate = globalLatest.split('T')[0];
+
+  return {
+    messageCount: totalCount,
+    latestMessageDate: trimmedDate
+  };
+}
 
 export {
   getUser,
@@ -412,6 +464,7 @@ export {
   getTeamById,
   getTeamMembers,
   getAllTeams,
+  getTotalTeamMessages,
   addRemoveUserToTeams,
   createTeam
 }

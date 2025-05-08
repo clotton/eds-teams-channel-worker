@@ -1,5 +1,5 @@
 import { CORS_HEADERS } from "./constants";
-import { getUserTeams, addRemoveUserToTeams, getAllTeams } from "./api";
+import { getUserTeams, addRemoveUserToTeams, getAllTeams, getTotalTeamMessages } from "./api";
 
 const jsonToResponse = async (request, data, fct, env) => {
   const json = await fct(data);
@@ -104,26 +104,28 @@ export default {
           );
         }
 
-        const teamSummaries = await Promise.all(teamIds.map(async (teamId) => {
-          const teamSummary = await getTeamSummary(token, teamId);
-          if (!teamSummary) {
-            console.warn(`Error fetching team summary for ${teamId}`);
-            return null;
-          }
+          const teamSummaries = await Promise.all(teamIds.map(async (teamId) => {
+              const teamSummary = await getTeamSummary(token, teamId);
+              if (!teamSummary) {
+                  console.warn(`Error fetching team summary for ${teamId}`);
+                  return null;
+              }
 
-          const totalMembers = teamSummary.summary.guestsCount + teamSummary.summary.membersCount;
+              const totalMembers = teamSummary.summary.guestsCount + teamSummary.summary.membersCount;
+              const messageData = await getTotalTeamMessages(token, teamId);
 
-          return {
-            teamId,
-            teamName: teamSummary.displayName || '',
-            description: teamSummary.description || '',
-            created: teamSummary.createdDateTime,
-            memberCount: totalMembers,
-            webUrl: teamSummary.webUrl || '',
-          };
-        }));
+              return {
+                  teamId,
+                  teamName: teamSummary.displayName || '',
+                  description: teamSummary.description || '',
+                  created: teamSummary.createdDateTime,
+                  memberCount: totalMembers,
+                  webUrl: teamSummary.webUrl || '',
+                  messageCount: messageData.messageCount,
+                  lastMessage: messageData.latestMessageDate,
+              };
+          }));
 
-        // Filter out any null results (in case of errors fetching some summaries)
         const validSummaries = teamSummaries.filter(summary => summary !== null);
 
         return new Response(JSON.stringify(validSummaries), {
@@ -182,24 +184,6 @@ async function getFilteredTeams(accessToken, nameFilter, descriptionFilter) {
   });
 
   return filteredTeams;
-}
-
-function mergeTeamsById(filtered, allTeams) {
-  const allTeamsMap = new Map(allTeams.map(team => [team.id, team]));  // Use 'id' for allTeams
-
-  return filtered
-  .filter(team => allTeamsMap.has(team.teamId))  // Use 'teamId' for filtered
-  .map(team => ({
-    ...team,
-    ...allTeamsMap.get(team.teamId),  // Merge using teamId from filtered
-  }));
-}
-
-// Helper: Convert string to camelCase
-function toCamelCase(str) {
-  return str
-  .toLowerCase()
-  .replace(/[^a-z0-9]+(.)/g, (_, chr) => chr.toUpperCase());
 }
 
 // Get Microsoft Graph token
