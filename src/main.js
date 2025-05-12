@@ -1,5 +1,11 @@
 import { CORS_HEADERS } from "./constants";
-import { getUserTeams, addRemoveUserToTeams, getAllTeams, getTotalTeamMessages } from "./api";
+import {
+    getUserTeams,
+    addRemoveUserToTeams,
+    getAllTeams,
+    getTotalTeamMessages,
+    getTeamMembers
+} from "./api";
 
 const jsonToResponse = async (request, data, fct, env) => {
   const json = await fct(data);
@@ -70,26 +76,26 @@ export default {
       }
 
       if (pathname === '/teams/allTeams' && request.method === 'GET') {
-      try {
-        const teams = await getFilteredTeams(token, nameFilter, descriptionFilter);
-        console.log(`Fetched ${teams.length} teams`);
-        return new Response(JSON.stringify(teams), {
-          headers: CORS_HEADERS(env)
-        });
-      } catch (err) {
-        console.error('Worker error:', err);
-        return new Response(
-            JSON.stringify({
-              error: err.message || 'Unknown error',
-              stack: err.stack || '',
-            }),
-            {
-              status: 500,
+          try {
+            const teams = await getFilteredTeams(token, nameFilter, descriptionFilter);
+            console.log(`Fetched ${teams.length} teams`);
+            return new Response(JSON.stringify(teams), {
               headers: CORS_HEADERS(env)
-            }
-        );
+            });
+          } catch (err) {
+            console.error('Worker error:', err);
+            return new Response(
+                JSON.stringify({
+                  error: err.message || 'Unknown error',
+                  stack: err.stack || '',
+                }),
+                {
+                  status: 500,
+                  headers: CORS_HEADERS(env)
+                }
+            );
+          }
       }
-    }
 
     // Handle /teams/summary route
     if (pathname === '/teams/summary' && request.method === 'POST') {
@@ -140,6 +146,27 @@ export default {
         );
       }
     }
+
+      if (pathname === '/teams/members' && request.method === 'GET') {
+          try {
+              const teamMembers = await getTeamMembers(searchParams.get('teamId'), token);
+              return new Response(JSON.stringify(teamMembers), {
+                  headers: CORS_HEADERS(env)
+              });
+          } catch (err) {
+              console.error('Worker error:', err);
+              return new Response(
+                  JSON.stringify({
+                      error: err.message || 'Unknown error',
+                      stack: err.stack || '',
+                  }),
+                  {
+                      status: 500,
+                      headers: CORS_HEADERS(env)
+                  }
+              );
+          }
+      }
 
     return new Response('Not Found', { status: 404 });
   },

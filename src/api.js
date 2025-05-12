@@ -105,20 +105,14 @@ const getTeamById = async (id, bearer) => {
   return res.json();
 };
 
-const getTeamMembers = async (data) => {
-  let { id, name, bearer } = data;
-  if (!id && name) {
-    const team = await getTeam(name, data.bearer);
-    if (!team) return null;
-    id = team.id;
-  }
+const getTeamMembers = async (teamId, bearer) => {
 
   const headers = {
-    ConsistencyLevel: 'eventual',
     Authorization: `Bearer ${bearer}`,
+    Accept: 'application/json',
   };
 
-	  const url = `https://graph.microsoft.com/v1.0/teams/${id}/members`
+  const url = `https://graph.microsoft.com/v1.0/teams/${teamId}/members`
 
   const res = await fetch(url, {
     method: 'GET',
@@ -130,7 +124,7 @@ const getTeamMembers = async (data) => {
     return json.value.map(o => {
       return {
         email: o.email,
-        teamName: o.displayName,
+        displayName: o.displayName,
         role: o.roles && o.roles.length > 0 ? o.roles[0] : 'unknown',
       };
     });
