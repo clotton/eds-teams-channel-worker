@@ -165,8 +165,7 @@ const addRemoveUserToTeams = async (data) => {
   };
 
   await asyncForEach(data.body.add, async (id) => {
-    const team = await getTeamById(id, data.bearer);
-
+    const team = await getTeamById({id, bearer: data.bearer});
     if (team) {
       const headers = {
         Authorization: `Bearer ${data.bearer}`,
@@ -199,8 +198,7 @@ const addRemoveUserToTeams = async (data) => {
   });
 
   await asyncForEach(data.body.remove, async (id) => {
-    const team = await getTeamById(id, data.bearer);
-
+    const team = await getTeamById({id, bearer: data.bearer});
     if (team) {
       const headers = {
         Authorization: `Bearer ${data.bearer}`,
