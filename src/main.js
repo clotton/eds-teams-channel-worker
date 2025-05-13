@@ -3,7 +3,6 @@ import {
   addRemoveUserToTeams,
   getAllTeams,
   getTeamMembers,
-  getTeamById,
   getTotalTeamMessages,
   getUserTeams
 } from "./api";
@@ -52,6 +51,25 @@ async function getGraphToken(env) {
   const json = await res.json();
   return json.access_token;
 }
+async function getTeamSummary(accessToken, teamId) {
+  const url = `https://graph.microsoft.com/v1.0/teams/${teamId}`;
+
+  const response = await fetch(url, {
+    method: 'GET',
+    headers: {
+      Authorization: `Bearer ${accessToken}`,
+      Accept: 'application/json',
+    },
+  });
+
+  if (!response.ok) {
+    console.warn(
+      `Error fetching team ${teamId} summary: ${response.statusText}`);
+    return null;
+  }
+
+  return await response.json();
+}
 
 export default {
   async fetch(request, env) {
@@ -60,8 +78,7 @@ export default {
       const {searchParams } = url;
       const paths = decodeURI(url.pathname).split('/').filter(Boolean);
       let action;
-      const data = {
-      };
+      const data = {};
 
       if (request.method === 'OPTIONS') {
         return options(request, env);
@@ -94,14 +111,21 @@ export default {
           break;
         }
         case 'teams-summary': {
-          const { teamIds } =  await request.json();
+          const body  =  await request.json();
+          const teamIds = body.teamIds || [];
+
           if (!Array.isArray(teamIds) || teamIds.length === 0) {
             return new Response(JSON.stringify({ error: 'No team IDs provided' }), { status: 400, headers: CORS_HEADERS(env) });
           }
+
           const summaries = await Promise.all(teamIds.map(async (teamId) => {
-            const teamSummary = await getTeamById({id: teamId, bearer: data.bearer});
-            if (!teamSummary) return null;
-            const messageData = await getTotalTeamMessages({id: teamId, bearer: data.bearer});
+              const teamSummary = await getTeamSummary(data.bearer, teamId);
+              if (!teamSummary) {
+                console.warn(`Error fetching team summary for ${teamId}`);
+                return null;
+              }
+              const messageData = await getTotalTeamMessages({id: teamId, bearer: data.bearer});
+
             return {
               teamId,
               teamName: teamSummary.displayName || '',
@@ -113,6 +137,7 @@ export default {
               lastMessage: messageData.latestMessageDate,
             };
           }));
+
           return new Response(JSON.stringify(summaries.filter(Boolean)), { headers: CORS_HEADERS(env) });
         }
         case 'teams-members': {

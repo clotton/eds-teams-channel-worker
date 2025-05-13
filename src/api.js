@@ -273,12 +273,8 @@ async function getTotalTeamMessages(data) {
     }
   }
 
-  const trimmedDate = globalLatest.split('T')[0];
 
-  return {
-    messageCount: totalCount,
-    latestMessageDate: trimmedDate
-  };
+  return globalLatest ? { count: totalCount, latestMessageDate: globalLatest.split('T')[0] } : { count: 0, latestMessageDate: null };
 }
 
 export {
