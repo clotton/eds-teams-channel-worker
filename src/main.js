@@ -1,16 +1,17 @@
-import { CORS_HEADERS } from "./constants";
+import {CORS_HEADERS} from "./constants";
 import {
-    getUserTeams,
-    addRemoveUserToTeams,
-    getAllTeams,
-    getTotalTeamMessages,
-    getTeamMembers
+  addRemoveUserToTeams,
+  getAllTeams,
+  getTeamMembers,
+  getTeamById,
+  getTotalTeamMessages,
+  getUserTeams
 } from "./api";
 
-const jsonToResponse = async (request, data, fct, env) => {
-  const json = await fct(data);
-  if (json) {
-    return new Response(JSON.stringify(json), {
+const options = async (request, env) => {
+  if (request.method === 'OPTIONS') {
+    return new Response(null, {
+      status: 204,
       headers: CORS_HEADERS(env),
     });
   }
@@ -18,198 +19,22 @@ const jsonToResponse = async (request, data, fct, env) => {
     status: 404,
     headers: CORS_HEADERS(env),
   });
-}
-
-export default {
-  async fetch(request, env) {
-    const url = new URL(request.url);
-    const pathname = url.pathname;
-    const searchParams = url.searchParams;
-    const nameFilter = searchParams.get("nameFilter") || '';
-    const descriptionFilter = searchParams.get("descriptionFilter") || '';
-
-    if (request.method === 'OPTIONS') {
-      return new Response(null, { status: 204, headers: CORS_HEADERS(env)});
-    }
-    let action;
-    const data = {
-      method: request.method,
-    };
-    const token = await getGraphToken(env);
-    if( pathname === '/teams/addRemoveTeamMember' && request.method === 'POST') {
-          const body = await request.json();
-          console.log('Received body', body);
-          try {
-              const emailId = searchParams.get('emailId');
-              if (!emailId) {
-                  return new Response('Email ID is required', { status: 400, headers: CORS_HEADERS(env) });
-              }
-              const result = await addRemoveUserToTeams(emailId, body, token);
-              console.log('result:', result);
-              return new Response(JSON.stringify(result), {
-                  headers: CORS_HEADERS(env),
-              });
-          } catch (err) {
-              console.error('Worker error:', err);
-
-              return new Response(
-                  JSON.stringify({
-                      error: err.message || 'Unknown error',
-                      stack: err.stack || '',
-                  }),
-                  {
-                      status: 500,
-                      headers:CORS_HEADERS(env)
-                  }
-              );
-          }
-      }
-      else if (pathname === '/teams/userTeams' && request.method === 'GET') {
-          const emailId = searchParams.get('emailId');
-          if (!emailId) {
-              return new Response('Email ID is required', { status: 400, headers: CORS_HEADERS(env) });
-          }
-            data.id = emailId;
-            data.bearer = token;
-
-             return jsonToResponse(request, data, getUserTeams, env);
-      }
-
-      if (pathname === '/teams/allTeams' && request.method === 'GET') {
-          try {
-            const teams = await getFilteredTeams(token, nameFilter, descriptionFilter);
-            console.log(`Fetched ${teams.length} teams`);
-            return new Response(JSON.stringify(teams), {
-              headers: CORS_HEADERS(env)
-            });
-          } catch (err) {
-            console.error('Worker error:', err);
-            return new Response(
-                JSON.stringify({
-                  error: err.message || 'Unknown error',
-                  stack: err.stack || '',
-                }),
-                {
-                  status: 500,
-                  headers: CORS_HEADERS(env)
-                }
-            );
-          }
-      }
-
-    // Handle /teams/summary route
-    if (pathname === '/teams/summary' && request.method === 'POST') {
-      try {
-        const requestBody = await request.json();
-        const teamIds = requestBody.teamIds || [];
-
-        if (!Array.isArray(teamIds) || teamIds.length === 0) {
-          return new Response(
-              JSON.stringify({ error: 'No team IDs provided' }),
-              { status: 400,  headers: CORS_HEADERS(env)}
-          );
-        }
-
-          const teamSummaries = await Promise.all(teamIds.map(async (teamId) => {
-              const teamSummary = await getTeamSummary(token, teamId);
-              if (!teamSummary) {
-                  console.warn(`Error fetching team summary for ${teamId}`);
-                  return null;
-              }
-
-              const totalMembers = teamSummary.summary.guestsCount + teamSummary.summary.membersCount;
-              const messageData = await getTotalTeamMessages(token, teamId);
-
-              return {
-                  teamId,
-                  teamName: teamSummary.displayName || '',
-                  description: teamSummary.description || '',
-                  created: teamSummary.createdDateTime,
-                  memberCount: totalMembers,
-                  webUrl: teamSummary.webUrl || '',
-                  messageCount: messageData.messageCount,
-                  lastMessage: messageData.latestMessageDate,
-              };
-          }));
-
-        const validSummaries = teamSummaries.filter(summary => summary !== null);
-
-        return new Response(JSON.stringify(validSummaries), {
-            headers: CORS_HEADERS(env)
-        });
-
-      } catch (err) {
-        console.error('Error in /teams/summary:', err);
-        return new Response(
-            JSON.stringify({ error: 'Failed to fetch team summaries', details: err.message }),
-            { status: 500, headers: CORS_HEADERS(env), }
-        );
-      }
-    }
-
-      if (pathname === '/teams/members' && request.method === 'GET') {
-          try {
-              const teamMembers = await getTeamMembers(searchParams.get('teamId'), token);
-              return new Response(JSON.stringify(teamMembers), {
-                  headers: CORS_HEADERS(env)
-              });
-          } catch (err) {
-              console.error('Worker error:', err);
-              return new Response(
-                  JSON.stringify({
-                      error: err.message || 'Unknown error',
-                      stack: err.stack || '',
-                  }),
-                  {
-                      status: 500,
-                      headers: CORS_HEADERS(env)
-                  }
-              );
-          }
-      }
-
-    return new Response('Not Found', { status: 404 });
-  },
 };
 
-// Fetch team details from Graph
-async function getTeamSummary(accessToken, teamId) {
-  const url = `https://graph.microsoft.com/v1.0/teams/${teamId}`;
-
-  const response = await fetch(url, {
-    method: 'GET',
-    headers: {
-      Authorization: `Bearer ${accessToken}`,
-      Accept: 'application/json',
-    },
-  });
-
-  if (!response.ok) {
-    console.warn(`Error fetching team ${teamId} summary: ${response.statusText}`);
-    return null;
+const jsonToResponse = async (data, fct, env) => {
+  try {
+    const json = await fct(data);
+    return new Response(JSON.stringify(json || 'Not found'), {
+      status: json ? 200 : 404,
+      headers: CORS_HEADERS(env),
+    });
+  } catch (err) {
+    return new Response(
+      JSON.stringify({ error: err.message || 'Unknown error' }),
+      { status: 500, headers: CORS_HEADERS(env) }
+    );
   }
-
-  const data = await response.json();
-  return data;
-}
-
-/// Fetch Teams using only getAllTeams and apply filters
-async function getFilteredTeams(accessToken, nameFilter, descriptionFilter) {
-  let allTeams = await getAllTeams(accessToken, nameFilter, descriptionFilter);
-
-  // Only keep public teams
-  allTeams = allTeams?.filter(o => o.visibility !== 'private');
-
-  const filteredTeams = allTeams.filter(team => {
-    const name = team.displayName?.toLowerCase() || '';
-    const desc = team.description?.toLowerCase() || '';
-    return name.includes(nameFilter.toLowerCase()) &&
-        desc.includes(descriptionFilter.toLowerCase());
-  });
-
-  return filteredTeams;
-}
-
+};
 // Get Microsoft Graph token
 async function getGraphToken(env) {
   const res = await fetch(env.AUTH_URL, {
@@ -228,6 +53,105 @@ async function getGraphToken(env) {
   return json.access_token;
 }
 
+export default {
+  async fetch(request, env) {
+    try {
+      const url = new URL(request.url);
+      const {searchParams } = url;
+      const paths = decodeURI(url.pathname).split('/').filter(Boolean);
+      let action;
+      const data = {
+      };
+
+      if (request.method === 'OPTIONS') {
+        return options(request, env);
+      }
+
+      if (paths && paths.length > 0) {
+        if (paths[0] === 'teams' || paths[0] === 'users') {
+          const prefix = paths[0];
+          if (paths.length === 1) {
+            action = prefix;
+          } else if (paths.length === 2) {
+            action = `${prefix}-${paths[1]}`;
+          } else if (paths.length === 3) {
+            action = `${prefix}-${paths[2]}`;
+            data.id = paths[1];
+          }
+        }
+      }
+
+    data.bearer = await getGraphToken(env);
+
+    if (data.bearer) {
+      switch (action) {
+        case 'teams': {
+          if (request.method === 'GET') {
+            data.nameFilter = searchParams.get("nameFilter") || '';
+            data. descriptionFilter = searchParams.get("descriptionFilter") || '';
+            return jsonToResponse(data, getAllTeams, env);
+          }
+          break;
+        }
+        case 'teams-summary': {
+          const { teamIds } =  await request.json();
+          if (!Array.isArray(teamIds) || teamIds.length === 0) {
+            return new Response(JSON.stringify({ error: 'No team IDs provided' }), { status: 400, headers: CORS_HEADERS(env) });
+          }
+          const summaries = await Promise.all(teamIds.map(async (teamId) => {
+            const teamSummary = await getTeamById({id: teamId, bearer: data.bearer});
+            if (!teamSummary) return null;
+            const messageData = await getTotalTeamMessages({id: teamId, bearer: data.bearer});
+            return {
+              teamId,
+              teamName: teamSummary.displayName || '',
+              description: teamSummary.description || '',
+              created: teamSummary.createdDateTime,
+              memberCount: teamSummary.summary.guestsCount + teamSummary.summary.membersCount,
+              webUrl: teamSummary.webUrl || '',
+              messageCount: messageData.messageCount,
+              lastMessage: messageData.latestMessageDate,
+            };
+          }));
+          return new Response(JSON.stringify(summaries.filter(Boolean)), { headers: CORS_HEADERS(env) });
+        }
+        case 'teams-members': {
+          if (request.method === 'GET') {
+            return jsonToResponse(data, getTeamMembers, env);
+          }
+          break;
+        }
+        case 'users-teams': {
+          if (request.method === 'GET') {
+            return jsonToResponse(data, getUserTeams, env);
+          }
+          if (request.method === 'POST') {
+            data.body = await request.json();
+            return jsonToResponse(data, addRemoveUserToTeams, env);
+          }
+          break;
+        }
+        default:
+          return new Response(`Unknown action: ${action}`, {
+          status: 404,
+          headers: CORS_HEADERS(env),
+        });
+      }
+    } else {
+      return new Response('Cannot authenticate to 3rd party', {
+        status: 401,
+        headers: CORS_HEADERS(env),
+      });
+    }
+  } catch (e) {
+      console.error(e);
+      return new Response('Oops...', {
+        status: 500,
+        headers: CORS_HEADERS(env),
+      });
+    }
+  },
+};
 
 
 
