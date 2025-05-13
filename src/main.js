@@ -125,7 +125,6 @@ export default {
                 return null;
               }
               const messageData = await getTotalTeamMessages({id: teamId, bearer: data.bearer});
-
             return {
               teamId,
               teamName: teamSummary.displayName || '',
@@ -133,7 +132,7 @@ export default {
               created: teamSummary.createdDateTime,
               memberCount: teamSummary.summary.guestsCount + teamSummary.summary.membersCount,
               webUrl: teamSummary.webUrl || '',
-              messageCount: messageData.messageCount,
+              messageCount: messageData.count,
               lastMessage: messageData.latestMessageDate,
             };
           }));
