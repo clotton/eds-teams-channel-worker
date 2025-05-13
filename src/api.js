@@ -63,56 +63,34 @@ const getUserTeams = async (data) => {
   return null;
 }
 
-const getTeam = async (displayName, bearer) => {
-  const params = new URLSearchParams({
-    '$filter': `(displayName eq '${displayName}')`,
-    '$select': 'id,displayName,createdDateTime',
-  });
-
+const getTeamById = async (data) => {
+  const url = `https://graph.microsoft.com/v1.0/teams/${data.id}`
   const headers = {
-    ConsistencyLevel: 'eventual',
-    Authorization: `Bearer ${bearer}`,
-  };
-
-  const url = `https://graph.microsoft.com/v1.0/groups?${params}`
-
-  const res = await fetch(url, {
-    method: 'GET',
-    headers,
-  });
-
-  const json = await res.json();
-  if (json.value && json.value.length > 0) {
-    return json.value[0];
-  }
-
-  return null;
-}
-
-const getTeamById = async (id, bearer) => {
-  const headers = {
-    ConsistencyLevel: 'eventual',
-    Authorization: `Bearer ${bearer}`,
-  };
-
-  const url = `https://graph.microsoft.com/v1.0/teams/${id}`
-
-  const res = await fetch(url, {
-    method: 'GET',
-    headers,
-  });
-
-  return res.json();
-};
-
-const getTeamMembers = async (teamId, bearer) => {
-
-  const headers = {
-    Authorization: `Bearer ${bearer}`,
+    Authorization: `Bearer ${data.bearer}`,
     Accept: 'application/json',
   };
 
-  const url = `https://graph.microsoft.com/v1.0/teams/${teamId}/members`
+  try {
+    const response = await fetch(url, { method: 'GET', headers });
+    if (!response.ok) {
+      console.warn(`Error fetching team ${id}: ${response.statusText}`);
+      return null;
+    }
+    return response.json();
+  } catch (error) {
+    console.error(`Failed to fetch team ${data.id}:`, error);
+    return null;
+  }
+};
+
+const getTeamMembers = async (data) => {
+
+  const headers = {
+    Authorization: `Bearer ${data.bearer}`,
+    Accept: 'application/json',
+  };
+
+  const url = `https://graph.microsoft.com/v1.0/teams/${data.id}/members`
 
   const res = await fetch(url, {
     method: 'GET',
@@ -133,21 +111,36 @@ const getTeamMembers = async (teamId, bearer) => {
   return null;
 }
 
-const getAllTeams = async (accessToken, nameFilter = '', descriptionFilter = '') => {
+const getAllTeams = async (data) => {
+  const headers = {
+    Authorization: `Bearer ${data.bearer}`,
+  };
+
   const url = `https://graph.microsoft.com/v1.0/teams`;
-  const response = await fetch(url, {
+
+  const res = await fetch(url, {
     method: 'GET',
-    headers: {
-      Authorization: `Bearer ${accessToken}`,
-      Accept: 'application/json',
-    },
+    headers,
   });
 
-  if (!response.ok) return response;
+  const json = await res.json();
+  if (json && json.value) {
+    return json.value
+    .filter(o => o.visibility !== 'private') // Only public teams
+    .filter(o => {
+      const name = o.displayName?.toLowerCase() || '';
+      const desc = o.description?.toLowerCase() || '';
+      return name.includes(data.nameFilter.toLowerCase()) &&
+        desc.includes(data.descriptionFilter.toLowerCase());
+    })
+    .map(o => ({
+      id: o.id,
+      displayName: o.displayName,
+      description: o.description,
+    }));
+  }
 
-  const json = await response.json();
-
-  return json.value || [];
+  return null;
 };
 
 const asyncForEach = async (array, callback) => {
@@ -156,9 +149,8 @@ const asyncForEach = async (array, callback) => {
   }
 }
 
-const addRemoveUserToTeams = async (email, body, bearer) => {
-  const user = await getUser(email, bearer);
-  console.log('user:', user);
+const addRemoveUserToTeams = async (data) => {
+  const user = await getUser(data.id, data.bearer);
   if (!user) return null;
 
   const result = {
@@ -172,14 +164,12 @@ const addRemoveUserToTeams = async (email, body, bearer) => {
     }
   };
 
-  await asyncForEach(body.add, async (id) => {
-    console.log('Adding to team ID:', id);
-    const team = await getTeamById(id, bearer);
-    console.log('team:', team);
+  await asyncForEach(data.body.add, async (id) => {
+    const team = await getTeamById(id, data.bearer);
 
     if (team) {
       const headers = {
-        Authorization: `Bearer ${bearer}`,
+        Authorization: `Bearer ${data.bearer}`,
         'Content-Type': 'application/json',
       };
 
@@ -208,14 +198,12 @@ const addRemoveUserToTeams = async (email, body, bearer) => {
     }
   });
 
-  await asyncForEach(body.remove, async (id) => {
-    console.log('Removing from team ID:', id);
-    const team = await getTeamById(id, bearer);
-    console.log('team:', team);
+  await asyncForEach(data.body.remove, async (id) => {
+    const team = await getTeamById(id, data.bearer);
 
     if (team) {
       const headers = {
-        Authorization: `Bearer ${bearer}`,
+        Authorization: `Bearer ${data.bearer}`,
         'Content-Type': 'application/json',
       };
 
@@ -229,12 +217,9 @@ const addRemoveUserToTeams = async (email, body, bearer) => {
         if (res.status === 204) {
           result.remove.success.push(id);
         } else {
-          console.error('Failed to remove user from team:', id, res.status,
-              res.statusText);
           result.remove.failed.push(id);
         }
       } catch (err) {
-        console.error('Error removing user from team:', id, err);
         result.remove.failed.push(id);
       }
     }
@@ -243,164 +228,9 @@ const addRemoveUserToTeams = async (email, body, bearer) => {
   return result;
 };
 
-const updateTeamPhoto = async (data) => {
-  const { id } = data.body;
-  if (id) {
-    const headers = {
-      Authorization: `Bearer ${data.bearer}`,
-      'Content-Type': 'image/png',
-    };
-    const url = `https://graph.microsoft.com/v1.0/groups/${id}/photo/$value`;
-    console.log('Updating photo', url);
-
-    const res = await fetch(url, {
-      method: 'PUT',
-      headers,
-      body: logo(),
-    });
-
-    console.log('Photo updated', res.status, res.statusText);
-  }
-};
-
-const getOwners = async (bearer) => {
-  const params = new URLSearchParams({
-    '$filter': `startsWith(mail,'admin_')`,
-    '$select': 'id,mail,displayName',
-    '$count': 'true'
-  });
-
-  const headers = {
-    ConsistencyLevel: 'eventual',
-    Authorization: `Bearer ${bearer}`,
-  };
-
-  const url = `https://graph.microsoft.com/v1.0/users?${params}`
-  const res = await fetch(url, {
-    method: 'GET',
-    headers,
-  });
-
-  if (res.status === 200) {
-    const json = await res.json();
-    if (json.value && json.value.length > 0) {
-      return json.value.map(o => {
-        return {
-          id: o.id,
-          email: o.mail,
-          displayName: o.displayName,
-        };
-      });
-    }
-  }
-
-  return [];
-};
-
-const addMembers = async (teamId, members, bearer) => {
-  const headers = {
-    Authorization: `Bearer ${bearer}`,
-    'Content-Type': 'application/json',
-  };
-
-  const url = `https://graph.microsoft.com/v1.0/teams/${teamId}/members/add`;
-  const body = {
-    values:[]
-  };
-
-  members.forEach(member => {
-    const m = {
-      '@odata.type': 'microsoft.graph.aadUserConversationMember',
-      roles: [],
-      'user@odata.bind': `https://graph.microsoft.com/v1.0/users(\'${member.id}\')`
-    };
-    if (member.role) m.roles.push(member.role);
-    body.values.push(m);
-  });
-
-  console.log('Adding members', body.values);
-
-  await fetch(url, {
-    method: 'POST',
-    headers,
-    body: JSON.stringify(body),
-  });
-};
-
-
-const createTeam = async (data) => {
-  const owners = await getOwners(data.bearer);
-  if (!owners || owners.length === 0) {
-    console.error('No owners found');
-    return null;
-  }
-
-  const { name, description = '' } = data.body;
-  if (name) {
-    const headers = {
-      Authorization: `Bearer ${data.bearer}`,
-      'Content-Type': 'application/json',
-    };
-
-    const url = `https://graph.microsoft.com/v1.0/teams`;
-    const body = {
-      'template@odata.bind': 'https://graph.microsoft.com/v1.0/teamsTemplates(\'standard\')',
-      visibility: 'public',
-      displayName: name,
-      description,
-      guestSettings: {
-        'allowCreateUpdateChannels': true,
-      },
-      members:[]
-    };
-
-    // api accepts only 1 member...
-    owners.filter(o => o.email.startsWith('admin_ac')).forEach(o => {
-      body.members.push({
-        '@odata.type': '#microsoft.graph.aadUserConversationMember',
-        roles:[
-          'owner'
-        ],
-        'user@odata.bind': `https://graph.microsoft.com/v1.0/users('${o.id}')`
-      });
-    });
-
-    const res = await fetch(url, {
-      method: 'POST',
-      headers,
-      body: JSON.stringify(body),
-    });
-
-    if (res.status === 202) {
-      const location = res.headers.get('location');
-      const id = location.split('\'')[1];
-      console.log('Team created', id);
-
-      //wait 2 seconds... object not found if too fast
-      await new Promise(resolve => setTimeout(resolve, 2000));
-
-      await updateTeamPhoto({ bearer: data.bearer, body: { id } });
-
-      const remaining = owners.filter(o => !o.email.startsWith('admin_ac')).map(o => {
-        return {
-          id: o.id,
-          role: 'owner',
-        };
-      });
-      await addMembers(id, remaining, data.bearer);
-
-      return {
-        name,
-        description,
-      };
-    }
-  }
-  return null;
-};
-
-async function getTotalTeamMessages(accessToken, teamId) {
-  const headers = { Authorization: `Bearer ${accessToken}` };
-  const channelsRes = await fetch(`https://graph.microsoft.com/v1.0/teams/${teamId}/channels`, { headers });
+async function getTotalTeamMessages(data) {
+  const headers = { Authorization: `Bearer ${data.bearer}` };
+  const channelsRes = await fetch(`https://graph.microsoft.com/v1.0/teams/${data.id}/channels`, { headers });
 
   if (!channelsRes.ok) return { count: 0, latestMessageDate: null };
 
@@ -409,7 +239,7 @@ async function getTotalTeamMessages(accessToken, teamId) {
   const results = await Promise.all(channels.map(async (channel) => {
     let count = 0;
     let latest = null;
-    let url = `https://graph.microsoft.com/v1.0/teams/${teamId}/channels/${channel.id}/messages`;
+    let url = `https://graph.microsoft.com/v1.0/teams/${data.id}/channels/${channel.id}/messages`;
 
     while (url) {
       const res = await fetch(url, { headers });
@@ -452,13 +282,10 @@ async function getTotalTeamMessages(accessToken, teamId) {
 }
 
 export {
-  getUser,
   getUserTeams,
-  getTeam,
-  getTeamById,
   getTeamMembers,
+  getTeamById,
   getAllTeams,
   getTotalTeamMessages,
   addRemoveUserToTeams,
-  createTeam
 }
