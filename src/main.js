@@ -4,7 +4,8 @@ import {
   getAllTeams,
   getTeamMembers,
   getTotalTeamMessages,
-  getUserTeams
+  getUserTeams,
+  inviteGuest
 } from "./api";
 
 const options = async (request, env) => {
@@ -107,6 +108,13 @@ export default {
             data.nameFilter = searchParams.get("nameFilter") || '';
             data. descriptionFilter = searchParams.get("descriptionFilter") || '';
             return jsonToResponse(data, getAllTeams, env);
+          }
+          break;
+        }
+        case 'teams-invitation': {
+          if (request.method === 'POST') {
+            data.body = await request.json();
+            return jsonToResponse(data, inviteGuest, env);
           }
           break;
         }

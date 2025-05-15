@@ -73,7 +73,7 @@ const getTeamById = async (data) => {
   try {
     const response = await fetch(url, { method: 'GET', headers });
     if (!response.ok) {
-      console.warn(`Error fetching team ${id}: ${response.statusText}`);
+      console.warn(`Error fetching team ${data.id}: ${response.statusText}`);
       return null;
     }
     return response.json();
@@ -182,7 +182,7 @@ const addRemoveUserToTeams = async (data) => {
           headers,
           body: JSON.stringify(body),
         });
-
+        console.log("add response:", res);
         if (res.status === 204) {
           result.add.success.push(id);
         } else {
@@ -211,7 +211,7 @@ const addRemoveUserToTeams = async (data) => {
           method: 'DELETE',
           headers,
         });
-
+        console.log("delete response:", res);
         if (res.status === 204) {
           result.remove.success.push(id);
         } else {
@@ -275,6 +275,47 @@ async function getTotalTeamMessages(data) {
   return globalLatest ? { count: totalCount, latestMessageDate: globalLatest.split('T')[0] } : { count: 0, latestMessageDate: null };
 }
 
+async function inviteGuest(data) {
+  const url = `https://graph.microsoft.com/v1.0/invitations`;
+  const headers = {
+    Authorization: `Bearer ${data.bearer}`,
+    'Content-Type': 'application/json',
+  };
+
+  const body = {
+    "invitedUserEmailAddress": data.body.email,
+    "inviteRedirectUrl": "https://teams.microsoft.com",
+    "sendInvitationMessage": true,
+    "invitedUserDisplayName": data.body.name
+  }
+
+  try {
+    const response = await fetch(url, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify(body),
+    });
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      console.error(`Error inviting ${data.body.email}: ${response.status} - ${response.statusText}. Response: ${errorText}`);
+      return { error: `Failed to invite user: ${response.statusText}` };
+    }
+
+    try {
+      const json = await response.json();
+      console.log(`Invitation sent to ${data.body.email}. User ID: ${json.invitedUser?.id || 'N/A'}`);
+      return json;
+    } catch (jsonError) {
+      console.error(`Error parsing response for ${data.body.email}:`, jsonError.message);
+      return { error: 'Failed to parse response from server' };
+    }
+  } catch (networkError) {
+    console.error(`Network error inviting ${data.body.email}:`, networkError.message);
+    return { error: 'Network error occurred while sending invitation' };
+  }
+}
+
 export {
   getUserTeams,
   getTeamMembers,
@@ -282,4 +323,5 @@ export {
   getAllTeams,
   getTotalTeamMessages,
   addRemoveUserToTeams,
+  inviteGuest,
 }
