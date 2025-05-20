@@ -5,7 +5,8 @@ import {
   getTeamMembers,
   getTotalTeamMessages,
   getUserTeams,
-  inviteGuest
+  inviteGuest,
+  processGuests
 } from "./api";
 
 const options = async (request, env) => {
@@ -84,6 +85,9 @@ export default {
       if (request.method === 'OPTIONS') {
         return options(request, env);
       }
+      if (request.method === 'POST') {
+        data.body = await request.json();
+      }
 
       if (paths && paths.length > 0) {
         if (paths[0] === 'teams' || paths[0] === 'users') {
@@ -104,23 +108,19 @@ export default {
     if (data.bearer) {
       switch (action) {
         case 'teams': {
-          if (request.method === 'GET') {
             data.nameFilter = searchParams.get("nameFilter") || '';
             data. descriptionFilter = searchParams.get("descriptionFilter") || '';
             return jsonToResponse(data, getAllTeams, env);
-          }
-          break;
         }
         case 'teams-invitation': {
-          if (request.method === 'POST') {
-            data.body = await request.json();
-            return jsonToResponse(data, inviteGuest, env);
-          }
-          break;
+          return jsonToResponse(data, inviteGuest, env);
+        }
+        case 'teams-guests': {
+          console.log('teams-guests', data);
+          return jsonToResponse(data, processGuests, env);
         }
         case 'teams-summary': {
-          const body  =  await request.json();
-          const teamIds = body.teamIds || [];
+          const teamIds = data.body.teamIds || [];
 
           if (!Array.isArray(teamIds) || teamIds.length === 0) {
             return new Response(JSON.stringify({ error: 'No team IDs provided' }), { status: 400, headers: CORS_HEADERS(env) });
@@ -148,17 +148,13 @@ export default {
           return new Response(JSON.stringify(summaries.filter(Boolean)), { headers: CORS_HEADERS(env) });
         }
         case 'teams-members': {
-          if (request.method === 'GET') {
             return jsonToResponse(data, getTeamMembers, env);
-          }
-          break;
         }
         case 'users-teams': {
           if (request.method === 'GET') {
             return jsonToResponse(data, getUserTeams, env);
           }
           if (request.method === 'POST') {
-            data.body = await request.json();
             return jsonToResponse(data, addRemoveUserToTeams, env);
           }
           break;

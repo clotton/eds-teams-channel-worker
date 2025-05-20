@@ -176,24 +176,17 @@ const addRemoveUserToTeams = async (data) => {
       const body = {
         '@odata.id': `https://graph.microsoft.com/v1.0/directoryObjects/${user.id}`
       }
-      try {
-        const res = await fetch(url, {
+      const res = await fetch(url, {
           method: 'POST',
           headers,
           body: JSON.stringify(body),
         });
-        console.log("add response:", res);
         if (res.status === 204) {
           result.add.success.push(id);
         } else {
-          console.error('Failed to add user to team:', id, res.status,
-              res.statusText);
           result.add.failed.push(id);
         }
-      } catch (err) {
-        console.error('Error adding user to team:', id, err);
-        result.add.failed.push(id);
-      }
+
     }
   });
 
@@ -206,20 +199,15 @@ const addRemoveUserToTeams = async (data) => {
       };
 
       const url = `https://graph.microsoft.com/v1.0/groups/${team.id}/members/${user.id}/$ref`;
-      try {
         const res = await fetch(url, {
           method: 'DELETE',
           headers,
         });
-        console.log("delete response:", res);
         if (res.status === 204) {
           result.remove.success.push(id);
         } else {
           result.remove.failed.push(id);
         }
-      } catch (err) {
-        result.remove.failed.push(id);
-      }
     }
   });
 
@@ -316,6 +304,53 @@ async function inviteGuest(data) {
   }
 }
 
+// Invite guest if not in directory, else retrieve existing user
+async function ensureGuestUser(data) {
+    // Check if user already exists in Azure AD
+    const user = await getUser(data.id, data.bearer);
+   if (!user) {
+      const invitation = await inviteGuest({id: data.id, bearer: data.bearer});
+      return invitation.invitedUser.id;
+    }
+    return user.id;
+}
+
+// Add user to Team
+async function addGuestToTeam(data) {
+  const headers = {
+    Authorization: `Bearer ${data.bearer}`,
+    'Content-Type': 'application/json',
+  };
+    const url = `https://graph.microsoft.com/v1.0/groups/${data.id}/members/$ref`;
+    const body = {
+      '@odata.id': `https://graph.microsoft.com/v1.0/directoryObjects/${data.userId}`
+    }
+      const response = await fetch(url, {
+        method: 'POST',
+        headers,
+        body: JSON.stringify(body),
+      });
+
+    return response;
+}
+
+async function processGuests(data) {
+  const results = [];
+  for (const email of data.body.guests) {
+    const userId = await ensureGuestUser({ id: email, bearer: data.bearer });
+    let added = false;
+    if (userId) {
+      data.userId = userId;
+      const response = await addGuestToTeam(data);
+      if (response.status === 204) {
+        added = true;
+      }
+    }
+    results.push({ email, added });
+  }
+  return results;
+}
+
 export {
   getUserTeams,
   getTeamMembers,
@@ -324,4 +359,5 @@ export {
   getTotalTeamMessages,
   addRemoveUserToTeams,
   inviteGuest,
+  processGuests
 }
