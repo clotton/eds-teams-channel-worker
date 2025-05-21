@@ -115,7 +115,6 @@ export default {
         case 'teams-invitation': {
           return jsonToResponse({email: data.body.email, name: data.body.name, bearer: data.bearer}, inviteGuest, env);
         }
-
         case 'teams-summary': {
           const teamIds = data.body.teamIds || [];
 
@@ -184,6 +183,3 @@ export default {
     }
   },
 };
-
-
-
