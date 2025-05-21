@@ -113,7 +113,7 @@ export default {
             return jsonToResponse(data, getAllTeams, env);
         }
         case 'teams-invitation': {
-          return jsonToResponse(data, inviteGuest, env);
+          return jsonToResponse({email: data.body.email, name: data.body.name, bearer: data.bearer}, inviteGuest, env);
         }
 
         case 'teams-summary': {

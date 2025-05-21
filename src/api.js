@@ -272,10 +272,10 @@ async function inviteGuest(data) {
   };
 
   const body = {
-    "invitedUserEmailAddress": data.body.email,
+    "invitedUserEmailAddress": data.email,
     "inviteRedirectUrl": "https://teams.microsoft.com",
     "sendInvitationMessage": true,
-    "invitedUserDisplayName": data.body.name
+    "invitedUserDisplayName": data.name
   }
 
   const response = await fetch(url, {
@@ -292,10 +292,12 @@ async function inviteGuest(data) {
 
 // Invite guest if not in directory, else retrieve existing user
 async function ensureGuestUser(data) {
-  const user = await xgetUser(data.id, data.bearer);
-  if (user?.notFound){
-    const invite = await inviteGuest(data );
-
+  const user = await getUser(data.emailId, data.bearer);
+  if (user?.notFound) {
+   const invite = await inviteGuest({email: data.emailId, name: '', bearer: data.bearer});
+    if (invite) {
+      return invite.invitedUser.id;
+    }
   }
   if (user?.id) return user.id;
   return null;
@@ -320,7 +322,9 @@ async function addGuestToTeam(data) {
 async function addTeamMembers(data) {
   const results = [];
   for (const email of data.body.guests) {
-    const userId = await ensureGuestUser({ id: email, bearer: data.bearer });
+    const originalBody = { ...data.body };
+    data.emailId = email;
+    const userId = await ensureGuestUser(data);
     let added = false;
     if (userId) {
       const response = await addGuestToTeam({ ...data, userId });
