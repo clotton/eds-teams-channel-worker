@@ -1,12 +1,12 @@
-import {CORS_HEADERS} from "./constants";
+import {CORS_HEADERS, TENANT_ID } from "./constants";
 import {
   addRemoveUserToTeams,
   getAllTeams,
+  addTeamMembers,
   getTeamMembers,
   getTotalTeamMessages,
   getUserTeams,
-  inviteGuest,
-  processGuests
+  inviteGuest
 } from "./api";
 
 const options = async (request, env) => {
@@ -115,10 +115,7 @@ export default {
         case 'teams-invitation': {
           return jsonToResponse(data, inviteGuest, env);
         }
-        case 'teams-guests': {
-          console.log('teams-guests', data);
-          return jsonToResponse(data, processGuests, env);
-        }
+
         case 'teams-summary': {
           const teamIds = data.body.teamIds || [];
 
@@ -148,7 +145,14 @@ export default {
           return new Response(JSON.stringify(summaries.filter(Boolean)), { headers: CORS_HEADERS(env) });
         }
         case 'teams-members': {
+          if (request.method === 'GET') {
             return jsonToResponse(data, getTeamMembers, env);
+          }
+          if (request.method === 'POST') {
+            data.tenantId = TENANT_ID;
+            return jsonToResponse(data, addTeamMembers, env);
+          }
+          break;
         }
         case 'users-teams': {
           if (request.method === 'GET') {

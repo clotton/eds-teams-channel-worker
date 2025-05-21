@@ -25,6 +25,10 @@ const getUser = async (email, bearer) => {
     headers,
   });
 
+  if (res.status === 404) {
+    return { notFound: true };
+  }
+
   const json = await res.json();
   if (json.value && json.value.length > 0) {
     return json.value[0];
@@ -70,17 +74,14 @@ const getTeamById = async (data) => {
     Accept: 'application/json',
   };
 
-  try {
-    const response = await fetch(url, { method: 'GET', headers });
-    if (!response.ok) {
-      console.warn(`Error fetching team ${data.id}: ${response.statusText}`);
-      return null;
-    }
+  const response = await fetch(url, { method: 'GET', headers });
+
+  const json = await response.json();
+  if (json.value) {
     return response.json();
-  } catch (error) {
-    console.error(`Failed to fetch team ${data.id}:`, error);
-    return null;
   }
+
+  return null;
 };
 
 const getTeamMembers = async (data) => {
@@ -259,12 +260,12 @@ async function getTotalTeamMessages(data) {
     }
   }
 
-
   return globalLatest ? { count: totalCount, latestMessageDate: globalLatest.split('T')[0] } : { count: 0, latestMessageDate: null };
 }
 
 async function inviteGuest(data) {
   const url = `https://graph.microsoft.com/v1.0/invitations`;
+
   const headers = {
     Authorization: `Bearer ${data.bearer}`,
     'Content-Type': 'application/json',
@@ -277,71 +278,79 @@ async function inviteGuest(data) {
     "invitedUserDisplayName": data.body.name
   }
 
-  try {
+  const response = await fetch(url, {
+    method: 'POST',
+    headers,
+    body: JSON.stringify(body),
+  });
+
+  const json = await response.json();
+  if (json && json.value) {
+    return json.invitedUser.id;
+  }
+  return null;
+}
+async function inviteGuestToTeam(data) {
+  const url = `https://graph.microsoft.com/v1.0/invitations`;
+
+  const headers = {
+    Authorization: `Bearer ${data.bearer}`,
+    'Content-Type': 'application/json',
+  };
+
+  const body = {
+    "invitedUserEmailAddress": data.body.email,
+    "inviteRedirectUrl": `https://teams.microsoft.com/l/team/${data.id}/conversations?groupId=${data.id}&tenantId=${data.tenantId}`,
+    "sendInvitationMessage": true,
+    "invitedUserDisplayName": data.body.name,
+    "invitedUserMessageInfo": {
+      "customizedMessageBody": `Hi,\n\nYou've been invited to join our Microsoft Team. Click below to accept and join:\n\nhttps://teams.microsoft.com/l/team/${data.id}/conversations?groupId=${data.id}&tenantId=${data.tenantId}`
+    }
+  }
     const response = await fetch(url, {
       method: 'POST',
       headers,
       body: JSON.stringify(body),
     });
 
-    if (!response.ok) {
-      const errorText = await response.text();
-      console.error(`Error inviting ${data.body.email}: ${response.status} - ${response.statusText}. Response: ${errorText}`);
-      return { error: `Failed to invite user: ${response.statusText}` };
-    }
-
-    try {
-      const json = await response.json();
-      console.log(`Invitation sent to ${data.body.email}. User ID: ${json.invitedUser?.id || 'N/A'}`);
-      return json;
-    } catch (jsonError) {
-      console.error(`Error parsing response for ${data.body.email}:`, jsonError.message);
-      return { error: 'Failed to parse response from server' };
-    }
-  } catch (networkError) {
-    console.error(`Network error inviting ${data.body.email}:`, networkError.message);
-    return { error: 'Network error occurred while sending invitation' };
+  const json = await response.json();
+  if (json && json.value) {
+    return json.invitedUser.id;
   }
+  return null;
 }
 
 // Invite guest if not in directory, else retrieve existing user
 async function ensureGuestUser(data) {
-    // Check if user already exists in Azure AD
-    const user = await getUser(data.id, data.bearer);
-   if (!user) {
-      const invitation = await inviteGuest({id: data.id, bearer: data.bearer});
-      return invitation.invitedUser.id;
-    }
-    return user.id;
+  const user = await getUser(data.id, data.bearer);
+  if (user?.notFound) return await inviteGuestToTeam(data);
+  if (user?.id) return user.id;
+  return null;
 }
 
-// Add user to Team
 async function addGuestToTeam(data) {
   const headers = {
     Authorization: `Bearer ${data.bearer}`,
     'Content-Type': 'application/json',
   };
-    const url = `https://graph.microsoft.com/v1.0/groups/${data.id}/members/$ref`;
-    const body = {
-      '@odata.id': `https://graph.microsoft.com/v1.0/directoryObjects/${data.userId}`
-    }
-      const response = await fetch(url, {
-        method: 'POST',
-        headers,
-        body: JSON.stringify(body),
-      });
-
-    return response;
+  const url = `https://graph.microsoft.com/v1.0/groups/${data.id}/members/$ref`;
+  const body = {
+    '@odata.id': `https://graph.microsoft.com/v1.0/directoryObjects/${data.userId}`
+  }
+  return await fetch(url, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify(body),
+    });
 }
 
-async function processGuests(data) {
+async function addTeamMembers(data) {
   const results = [];
   for (const email of data.body.guests) {
     const userId = await ensureGuestUser({ id: email, bearer: data.bearer });
     let added = false;
     if (userId) {
-      data.userId = userId;
-      const response = await addGuestToTeam(data);
+      const response = await addGuestToTeam({ ...data, userId });
       if (response.status === 204) {
         added = true;
       }
@@ -353,11 +362,12 @@ async function processGuests(data) {
 
 export {
   getUserTeams,
+  addTeamMembers,
   getTeamMembers,
   getTeamById,
   getAllTeams,
   getTotalTeamMessages,
   addRemoveUserToTeams,
   inviteGuest,
-  processGuests
+  inviteGuestToTeam
 }
