@@ -78,7 +78,7 @@ const getTeamById = async (data) => {
 
   const json = await response.json();
   if (json.value) {
-    return response.json();
+    return json;
   }
 
   return null;
@@ -284,46 +284,19 @@ async function inviteGuest(data) {
     body: JSON.stringify(body),
   });
 
-  const json = await response.json();
-  if (json && json.value) {
-    return json.invitedUser.id;
-  }
-  return null;
-}
-async function inviteGuestToTeam(data) {
-  const url = `https://graph.microsoft.com/v1.0/invitations`;
-
-  const headers = {
-    Authorization: `Bearer ${data.bearer}`,
-    'Content-Type': 'application/json',
-  };
-
-  const body = {
-    "invitedUserEmailAddress": data.body.email,
-    "inviteRedirectUrl": `https://teams.microsoft.com/l/team/${data.id}/conversations?groupId=${data.id}&tenantId=${data.tenantId}`,
-    "sendInvitationMessage": true,
-    "invitedUserDisplayName": data.body.name,
-    "invitedUserMessageInfo": {
-      "customizedMessageBody": `Hi,\n\nYou've been invited to join our Microsoft Team. Click below to accept and join:\n\nhttps://teams.microsoft.com/l/team/${data.id}/conversations?groupId=${data.id}&tenantId=${data.tenantId}`
-    }
-  }
-    const response = await fetch(url, {
-      method: 'POST',
-      headers,
-      body: JSON.stringify(body),
-    });
-
-  const json = await response.json();
-  if (json && json.value) {
-    return json.invitedUser.id;
+  if (response.ok) {
+    return await response.json();
   }
   return null;
 }
 
 // Invite guest if not in directory, else retrieve existing user
 async function ensureGuestUser(data) {
-  const user = await getUser(data.id, data.bearer);
-  if (user?.notFound) return await inviteGuestToTeam(data);
+  const user = await xgetUser(data.id, data.bearer);
+  if (user?.notFound){
+    const invite = await inviteGuest(data );
+
+  }
   if (user?.id) return user.id;
   return null;
 }
@@ -368,6 +341,5 @@ export {
   getAllTeams,
   getTotalTeamMessages,
   addRemoveUserToTeams,
-  inviteGuest,
-  inviteGuestToTeam
+  inviteGuest
 }
