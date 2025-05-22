@@ -295,7 +295,7 @@ async function ensureGuestUser(data) {
   const user = await getUser(data.emailId, data.bearer);
   if (user?.notFound) {
     console.log("User not found, inviting guest", data.emailId);
-   const invite = await inviteGuest({email: data.emailId, name: '', bearer: data.bearer});
+   const invite = await inviteGuest({email: data.emailId, name: data.displayName, bearer: data.bearer});
     if (invite) {
       return invite.invitedUser.id;
     }
@@ -323,24 +323,37 @@ async function addGuestToTeam(data) {
 
 async function addTeamMembers(data) {
   const results = [];
-  for (const email of data.body.guests) {
+
+  // Loop over the full user objects: { displayName, email }
+  for (const user of data.body) {
+    const { email, displayName } = user;
+
+    // Attach necessary properties to the data payload
     data.emailId = email;
+    data.name = displayName;
+
     const userId = await ensureGuestUser(data);
     let added = false;
+
     if (userId) {
       const response = await addGuestToTeam({ ...data, userId });
+
       if (response.status === 400) {
         console.log("User already in team", email);
         added = true;
       }
+
       if (response.status === 204) {
         added = true;
       }
     }
+
     results.push({ email, added });
   }
+
   return results;
 }
+
 
 export {
   getUserTeams,
