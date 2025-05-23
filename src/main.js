@@ -1,6 +1,5 @@
-import {CORS_HEADERS, TENANT_ID } from "./constants";
+import {CORS_HEADERS} from "./constants";
 import {
-  addRemoveUserToTeams,
   getAllTeams,
   addTeamMembers,
   getTeamMembers,
@@ -112,9 +111,6 @@ export default {
             data. descriptionFilter = searchParams.get("descriptionFilter") || '';
             return jsonToResponse(data, getAllTeams, env);
         }
-        case 'teams-invitation': {
-          return jsonToResponse({email: data.body.email, name: data.body.name, bearer: data.bearer}, inviteGuest, env);
-        }
         case 'teams-summary': {
           const teamIds = data.body.teamIds || [];
 
@@ -148,7 +144,6 @@ export default {
             return jsonToResponse(data, getTeamMembers, env);
           }
           if (request.method === 'POST') {
-            data.tenantId = TENANT_ID;
             return jsonToResponse(data, addTeamMembers, env);
           }
           break;
@@ -157,10 +152,11 @@ export default {
           if (request.method === 'GET') {
             return jsonToResponse(data, getUserTeams, env);
           }
-          if (request.method === 'POST') {
-            return jsonToResponse(data, addRemoveUserToTeams, env);
-          }
           break;
+        }
+        case 'users-invitation': {
+          console.log("inviteGuest", data);
+          return jsonToResponse(data, inviteGuest, env);
         }
         default:
           return new Response(`Unknown action: ${action}`, {

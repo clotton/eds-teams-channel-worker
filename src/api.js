@@ -1,3 +1,4 @@
+import {TENANT_ID } from "./constants";
 
 const getUser = async (email, bearer) => {
   // prevent getting other users
@@ -75,10 +76,8 @@ const getTeamById = async (data) => {
   };
 
   const response = await fetch(url, { method: 'GET', headers });
-
-  const json = await response.json();
-  if (json.value) {
-    return json;
+  if (response.ok) {
+    return await response.json();
   }
 
   return null;
@@ -144,77 +143,6 @@ const getAllTeams = async (data) => {
   return null;
 };
 
-const asyncForEach = async (array, callback) => {
-  for (let index = 0; index < array.length; index++) {
-    await callback(array[index]);
-  }
-}
-
-const addRemoveUserToTeams = async (data) => {
-  const user = await getUser(data.id, data.bearer);
-  if (!user) return null;
-
-  const result = {
-    add: {
-      success: [],
-      failed: [],
-    },
-    remove: {
-      success: [],
-      failed: [],
-    }
-  };
-
-  await asyncForEach(data.body.add, async (id) => {
-    const team = await getTeamById({id, bearer: data.bearer});
-    if (team) {
-      const headers = {
-        Authorization: `Bearer ${data.bearer}`,
-        'Content-Type': 'application/json',
-      };
-
-      const url = `https://graph.microsoft.com/v1.0/groups/${team.id}/members/$ref`;
-      const body = {
-        '@odata.id': `https://graph.microsoft.com/v1.0/directoryObjects/${user.id}`
-      }
-      const res = await fetch(url, {
-          method: 'POST',
-          headers,
-          body: JSON.stringify(body),
-        });
-        if (res.status === 204) {
-          result.add.success.push(id);
-        } else {
-          result.add.failed.push(id);
-        }
-
-    }
-  });
-
-  await asyncForEach(data.body.remove, async (id) => {
-    const team = await getTeamById({id, bearer: data.bearer});
-    if (team) {
-      const headers = {
-        Authorization: `Bearer ${data.bearer}`,
-        'Content-Type': 'application/json',
-      };
-
-      const url = `https://graph.microsoft.com/v1.0/groups/${team.id}/members/${user.id}/$ref`;
-        const res = await fetch(url, {
-          method: 'DELETE',
-          headers,
-        });
-        if (res.status === 204) {
-          result.remove.success.push(id);
-        } else {
-          result.remove.failed.push(id);
-        }
-    }
-  });
-
-  return result;
-};
-
 async function getTotalTeamMessages(data) {
   const headers = { Authorization: `Bearer ${data.bearer}` };
   const channelsRes = await fetch(`https://graph.microsoft.com/v1.0/teams/${data.id}/channels`, { headers });
@@ -272,10 +200,40 @@ async function inviteGuest(data) {
   };
 
   const body = {
-    "invitedUserEmailAddress": data.email,
+    "invitedUserEmailAddress": data.body.email,
     "inviteRedirectUrl": "https://teams.microsoft.com",
     "sendInvitationMessage": true,
-    "invitedUserDisplayName": data.name
+    "invitedUserDisplayName": data.body.displayName
+  }
+
+  const response = await fetch(url, {
+    method: 'POST',
+    headers,
+    body: JSON.stringify(body),
+  });
+console.log("inviteGuest", response.status, response.statusText);
+  if (response.ok) {
+    return await response.json();
+  }
+  return null;
+}
+
+async function inviteToTeam(data) {
+  const url = `https://graph.microsoft.com/v1.0/invitations`;
+
+  const headers = {
+    Authorization: `Bearer ${data.bearer}`,
+    'Content-Type': 'application/json',
+  };
+
+  const body = {
+    "invitedUserEmailAddress": data.email,
+    "inviteRedirectUrl": `https://teams.microsoft.com/l/team/${data.id}/conversations?groupId=${data.id}&tenantId=${TENANT_ID}`,
+    "sendInvitationMessage": true,
+    "invitedUserDisplayName": data.displayName,
+    "invitedUserMessageInfo": {
+      "customizedMessageBody": `Hi ${data.displayName},\n\nYou've been invited to join ${data.teamName} Microsoft Team. Click below to accept and join:\n\nhttps://teams.microsoft.com/l/team/${data.id}/conversations?groupId=${data.id}&tenantId=${TENANT_ID}`
+    }
   }
 
   const response = await fetch(url, {
@@ -290,12 +248,13 @@ async function inviteGuest(data) {
   return null;
 }
 
+
 // Invite guest if not in directory, else retrieve existing user
 async function ensureGuestUser(data) {
-  const user = await getUser(data.emailId, data.bearer);
+  const user = await getUser(data.email, data.bearer);
   if (user?.notFound) {
-    console.log("User not found, inviting guest", data.emailId);
-   const invite = await inviteGuest({email: data.emailId, name: data.displayName, bearer: data.bearer});
+    console.log("User not found, inviting to team", data.email);
+   const invite = await inviteToTeam(data);
     if (invite) {
       return invite.invitedUser.id;
     }
@@ -324,15 +283,17 @@ async function addGuestToTeam(data) {
 async function addTeamMembers(data) {
   const results = [];
 
+  const team = await getTeamById(data);
+  if (!team) {
+    console.log("Team not found", data.id);
+    return results;
+  }
+  data.teamName = team.displayName || '';
   // Loop over the full user objects: { displayName, email }
   for (const user of data.body) {
     const { email, displayName } = user;
 
-    // Attach necessary properties to the data payload
-    data.emailId = email;
-    data.name = displayName;
-
-    const userId = await ensureGuestUser(data);
+    const userId = await ensureGuestUser({...data, email, displayName });
     let added = false;
 
     if (userId) {
@@ -362,6 +323,5 @@ export {
   getTeamById,
   getAllTeams,
   getTotalTeamMessages,
-  addRemoveUserToTeams,
   inviteGuest
 }
