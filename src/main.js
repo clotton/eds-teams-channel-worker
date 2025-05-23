@@ -1,11 +1,12 @@
 import {CORS_HEADERS} from "./constants";
 import {
   getAllTeams,
+  getTeamById,
   addTeamMembers,
   getTeamMembers,
   getTotalTeamMessages,
   getUserTeams,
-  inviteGuest
+  inviteUser
 } from "./api";
 
 const options = async (request, env) => {
@@ -51,25 +52,6 @@ async function getGraphToken(env) {
 
   const json = await res.json();
   return json.access_token;
-}
-async function getTeamSummary(accessToken, teamId) {
-  const url = `https://graph.microsoft.com/v1.0/teams/${teamId}`;
-
-  const response = await fetch(url, {
-    method: 'GET',
-    headers: {
-      Authorization: `Bearer ${accessToken}`,
-      Accept: 'application/json',
-    },
-  });
-
-  if (!response.ok) {
-    console.warn(
-      `Error fetching team ${teamId} summary: ${response.statusText}`);
-    return null;
-  }
-
-  return await response.json();
 }
 
 export default {
@@ -119,19 +101,19 @@ export default {
           }
 
           const summaries = await Promise.all(teamIds.map(async (teamId) => {
-              const teamSummary = await getTeamSummary(data.bearer, teamId);
-              if (!teamSummary) {
-                console.warn(`Error fetching team summary for ${teamId}`);
-                return null;
-              }
+            const team = await getTeamById({ id: teamId, bearer: data.bearer });
+            if (!team) {
+              console.warn(`Error fetching team ${teamId} summary`);
+              return null;
+            }
               const messageData = await getTotalTeamMessages({id: teamId, bearer: data.bearer});
             return {
               teamId,
-              teamName: teamSummary.displayName || '',
-              description: teamSummary.description || '',
-              created: teamSummary.createdDateTime,
-              memberCount: teamSummary.summary.guestsCount + teamSummary.summary.membersCount,
-              webUrl: teamSummary.webUrl || '',
+              teamName: team.displayName || '',
+              description: team.description || '',
+              created: team.createdDateTime,
+              memberCount: team.summary.guestsCount + team.summary.membersCount,
+              webUrl: team.webUrl || '',
               messageCount: messageData.count,
               lastMessage: messageData.latestMessageDate,
             };
@@ -155,8 +137,7 @@ export default {
           break;
         }
         case 'users-invitation': {
-          console.log("inviteGuest", data);
-          return jsonToResponse(data, inviteGuest, env);
+          return jsonToResponse(data, inviteUser, env);
         }
         default:
           return new Response(`Unknown action: ${action}`, {

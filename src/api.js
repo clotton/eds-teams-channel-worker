@@ -1,4 +1,3 @@
-import {TENANT_ID } from "./constants";
 
 const getUser = async (email, bearer) => {
   // prevent getting other users
@@ -191,7 +190,7 @@ async function getTotalTeamMessages(data) {
   return globalLatest ? { count: totalCount, latestMessageDate: globalLatest.split('T')[0] } : { count: 0, latestMessageDate: null };
 }
 
-async function inviteGuest(data) {
+async function inviteUser(data) {
   const url = `https://graph.microsoft.com/v1.0/invitations`;
 
   const headers = {
@@ -211,7 +210,7 @@ async function inviteGuest(data) {
     headers,
     body: JSON.stringify(body),
   });
-console.log("inviteGuest", response.status, response.statusText);
+
   if (response.ok) {
     return await response.json();
   }
@@ -228,11 +227,11 @@ async function inviteToTeam(data) {
 
   const body = {
     "invitedUserEmailAddress": data.email,
-    "inviteRedirectUrl": `https://teams.microsoft.com/l/team/${data.id}/conversations?groupId=${data.id}&tenantId=${TENANT_ID}`,
+    "inviteRedirectUrl": `https://teams.microsoft.com/l/team/${data.id}/conversations?groupId=${data.id}&tenantId=36fb8e1d-a891-493f-96d0-3038e4e9291c`,
     "sendInvitationMessage": true,
     "invitedUserDisplayName": data.displayName,
     "invitedUserMessageInfo": {
-      "customizedMessageBody": `Hi ${data.displayName},\n\nYou've been invited to join ${data.teamName} Microsoft Team. Click below to accept and join:\n\nhttps://teams.microsoft.com/l/team/${data.id}/conversations?groupId=${data.id}&tenantId=${TENANT_ID}`
+      "customizedMessageBody": `Hi ${data.displayName},\n\nYou've been invited to join ${data.teamName} Microsoft Team. Click below to accept and join:\n\nhttps://teams.microsoft.com/l/team/${data.id}/conversations?groupId=${data.id}&tenantId=36fb8e1d-a891-493f-96d0-3038e4e9291c`,
     }
   }
 
@@ -247,7 +246,6 @@ async function inviteToTeam(data) {
   }
   return null;
 }
-
 
 // Invite guest if not in directory, else retrieve existing user
 async function ensureGuestUser(data) {
@@ -315,7 +313,6 @@ async function addTeamMembers(data) {
   return results;
 }
 
-
 export {
   getUserTeams,
   addTeamMembers,
@@ -323,5 +320,5 @@ export {
   getTeamById,
   getAllTeams,
   getTotalTeamMessages,
-  inviteGuest
+  inviteUser
 }
