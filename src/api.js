@@ -299,7 +299,6 @@ async function addTeamMembers(data) {
 
       if (response.status === 400) {
         console.log("User already in team", email);
-        added = true;
       }
 
       if (response.status === 204) {
