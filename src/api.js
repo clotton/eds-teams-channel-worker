@@ -231,7 +231,7 @@ async function getTeamMessageStats(data) {
       null
   );
 
-  return { messageCount: totalCount, latestMessageDate, recentCount };
+  return { messageCount: totalCount, latestMessage: latestMessageDate, recentCount };
 }
 
 
