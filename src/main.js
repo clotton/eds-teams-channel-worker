@@ -119,11 +119,8 @@ export default {
           return new Response(JSON.stringify(summaries.filter(Boolean)), { headers: CORS_HEADERS(env) });
         }
         case 'teams-messages': {
-          if (request.method === 'GET') {
-            return jsonToResponse(data, getTeamMessageStats, env);
-          }
           if (request.method === 'POST') {
-            return jsonToResponse(data, addTeamMembers, env);
+            return jsonToResponse(data, getTeamMessageStats, env);
           }
           break;
         }
