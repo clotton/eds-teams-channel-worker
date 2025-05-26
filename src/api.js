@@ -1,4 +1,4 @@
-
+import pLimit from 'p-limit';
 const getUser = async (email, bearer) => {
   // prevent getting other users
   if (!email ||
@@ -144,51 +144,97 @@ const getAllTeams = async (data) => {
 
 async function getTotalTeamMessages(data) {
   const headers = { Authorization: `Bearer ${data.bearer}` };
-  const channelsRes = await fetch(`https://graph.microsoft.com/v1.0/teams/${data.id}/channels`, { headers });
+  const teamId = data.id;
+  const now = new Date();
+  const cutoffDate = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000); // 30 days ago
 
-  if (!channelsRes.ok) return { count: 0, latestMessageDate: null };
+  console.log(`Fetching channels for team ${teamId}`);
+  const channelsRes = await fetchWithRetry(`https://graph.microsoft.com/v1.0/teams/${teamId}/channels`, { headers });
+
+  if (!channelsRes.ok) {
+    console.error(`Failed to fetch channels: ${channelsRes.status} ${channelsRes.statusText}`);
+    return { count: 0, latestMessageDate: null, recentCount: 0 };
+  }
 
   const channels = (await channelsRes.json()).value || [];
 
-  const results = await Promise.all(channels.map(async (channel) => {
+  const results = [];
+
+  for (const channel of channels) {
     let count = 0;
+    let recentCount = 0;
     let latest = null;
-    let url = `https://graph.microsoft.com/v1.0/teams/${data.id}/channels/${channel.id}/messages`;
+    let url = `https://graph.microsoft.com/v1.0/teams/${teamId}/channels/${channel.id}/messages`;
 
     while (url) {
-      const res = await fetch(url, { headers });
-      if (!res.ok) break;
+      console.log(`Fetching messages from: ${url}`);
+      const res = await fetchWithRetry(url, { headers });
+
+      if (!res.ok) {
+        const errorText = await res.text();
+        console.error(`Error fetching messages: ${res.status} ${res.statusText}`);
+        console.error(`URL: ${url}`);
+        console.error(`Response: ${errorText}`);
+        break;
+      }
 
       const data = await res.json();
       const messages = data.value || [];
-      count += messages.filter(msg => msg.from?.user).length; // Only count human messages
 
-      // Track the latest message date
       for (const msg of messages) {
-        const ts = msg.lastModifiedDateTime || msg.createdDateTime;
-        if (msg.from?.user && (!latest || ts > latest)) {
-          latest = ts;
+        if (msg.from?.user) {
+          count++;
+          const ts = new Date(msg.lastModifiedDateTime || msg.createdDateTime);
+          if (!latest || ts > latest) latest = ts;
+          if (ts >= cutoffDate) recentCount++;
+        }
+
+        let replyUrl = `https://graph.microsoft.com/v1.0/teams/${teamId}/channels/${channel.id}/messages/${msg.id}/replies`;
+        while (replyUrl) {
+          console.log(`Fetching replies from: ${replyUrl}`);
+          const replyRes = await fetchWithRetry(replyUrl, { headers });
+
+          if (!replyRes.ok) {
+            const replyErrorText = await replyRes.text();
+            console.error(`Error fetching replies: ${replyRes.status} ${replyRes.statusText}`);
+            console.error(`URL: ${replyUrl}`);
+            console.error(`Response: ${replyErrorText}`);
+            break;
+          }
+
+          const replyData = await replyRes.json();
+          const replies = replyData.value || [];
+
+          for (const reply of replies) {
+            if (reply.from?.user) {
+              count++;
+              const ts = new Date(reply.lastModifiedDateTime || reply.createdDateTime);
+              if (!latest || ts > latest) latest = ts;
+              if (ts >= cutoffDate) recentCount++;
+            }
+          }
+
+          replyUrl = replyData['@odata.nextLink'];
         }
       }
 
       url = data['@odata.nextLink'];
     }
 
-    return { count, latest };
-  }));
-
-  let totalCount = 0;
-  let globalLatest = null;
-
-  for (const r of results) {
-    totalCount += r.count;
-    if (!globalLatest || (r.latest && r.latest > globalLatest)) {
-      globalLatest = r.latest;
-    }
+    results.push({ count, latest, recentCount });
   }
 
-  return globalLatest ? { count: totalCount, latestMessageDate: globalLatest.split('T')[0] } : { count: 0, latestMessageDate: null };
+  const totalCount = results.reduce((sum, r) => sum + r.count, 0);
+  const recentCount = results.reduce((sum, r) => sum + r.recentCount, 0);
+  const latestMessageDate = results.reduce((latest, r) =>
+          !latest || (r.latest && r.latest > latest) ? r.latest : latest,
+      null
+  );
+
+  return { count: totalCount, latestMessageDate, recentCount };
 }
+
+
 
 async function inviteUser(data) {
   const url = `https://graph.microsoft.com/v1.0/invitations`;
@@ -311,6 +357,23 @@ async function addTeamMembers(data) {
 
   return results;
 }
+
+async function fetchWithRetry(url, options, retries = 5) {
+  for (let i = 0; i < retries; i++) {
+    const res = await fetch(url, options);
+
+    if (res.status !== 429) return res;
+
+    const retryAfter = res.headers.get("Retry-After");
+    const waitTime = retryAfter ? parseInt(retryAfter, 10) * 1000 : 5000; // default 5s
+    console.warn(`Rate limited. Waiting ${waitTime / 1000}s before retrying... [${i + 1}/${retries}]`);
+
+    await new Promise(resolve => setTimeout(resolve, waitTime));
+  }
+
+  throw new Error(`Failed after ${retries} retries due to 429 errors: ${url}`);
+}
+
 
 export {
   getUserTeams,
