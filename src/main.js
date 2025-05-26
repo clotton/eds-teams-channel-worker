@@ -106,7 +106,7 @@ export default {
               console.warn(`Error fetching team ${teamId} summary`);
               return null;
             }
-              const messageData = await getTotalTeamMessages({id: teamId, bearer: data.bearer});
+              //const messageData = await getTotalTeamMessages({id: teamId, bearer: data.bearer});
             return {
               teamId,
               teamName: team.displayName || '',
@@ -114,8 +114,8 @@ export default {
               created: team.createdDateTime,
               memberCount: team.summary.guestsCount + team.summary.membersCount,
               webUrl: team.webUrl || '',
-              messageCount: messageData.count,
-              lastMessage: messageData.latestMessageDate,
+          //    messageCount: messageData.count,
+          //    lastMessage: messageData.latestMessageDate,
             };
           }));
 
