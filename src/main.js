@@ -4,7 +4,7 @@ import {
   getTeamById,
   addTeamMembers,
   getTeamMembers,
-  getTotalTeamMessages,
+  getTeamMessageStats,
   getUserTeams,
   inviteUser
 } from "./api";
@@ -106,7 +106,6 @@ export default {
               console.warn(`Error fetching team ${teamId} summary`);
               return null;
             }
-              //const messageData = await getTotalTeamMessages({id: teamId, bearer: data.bearer});
             return {
               teamId,
               teamName: team.displayName || '',
@@ -114,12 +113,19 @@ export default {
               created: team.createdDateTime,
               memberCount: team.summary.guestsCount + team.summary.membersCount,
               webUrl: team.webUrl || '',
-          //    messageCount: messageData.count,
-          //    lastMessage: messageData.latestMessageDate,
             };
           }));
 
           return new Response(JSON.stringify(summaries.filter(Boolean)), { headers: CORS_HEADERS(env) });
+        }
+        case 'teams-messages': {
+          if (request.method === 'GET') {
+            return jsonToResponse(data, getTeamMessageStats, env);
+          }
+          if (request.method === 'POST') {
+            return jsonToResponse(data, addTeamMembers, env);
+          }
+          break;
         }
         case 'teams-members': {
           if (request.method === 'GET') {

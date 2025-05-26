@@ -142,7 +142,7 @@ const getAllTeams = async (data) => {
   return null;
 };
 
-async function getTotalTeamMessages(data) {
+async function getTeamMessageStats(data) {
   const headers = { Authorization: `Bearer ${data.bearer}` };
   const teamId = data.id;
   const now = new Date();
@@ -381,6 +381,6 @@ export {
   getTeamMembers,
   getTeamById,
   getAllTeams,
-  getTotalTeamMessages,
+  getTeamMessageStats,
   inviteUser
 }
