@@ -144,7 +144,7 @@ const getAllTeams = async (data) => {
 
 async function getTeamMessageStats(data) {
   const headers = { Authorization: `Bearer ${data.bearer}` };
-  const teamId = data.id;
+  const teamId = data.body.teamIds;
   const now = new Date();
   const cutoffDate = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000); // 30 days ago
 
