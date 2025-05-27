@@ -157,13 +157,14 @@ const getAllTeams = async (data) => {
 async function handleMessageStatsRequest(data) {
   const teamId = data.body.teamId;
   const bearer = data.bearer; // optionally inject this if auth is required
+  const continuationUrl = data.body.continuationToken;
 
   if (!teamId) {
     return new Response('Missing teamId', { status: 400 });
   }
 
   try {
-    const stats = await getTeamMessageStats(teamId, bearer);
+    const stats = await getTeamMessageStats(teamId, bearer, continuationUrl);
     return stats;
   } catch (err) {
     console.error(`Error fetching stats for team ${teamId}:`, err);
@@ -175,7 +176,7 @@ async function handleMessageStatsRequest(data) {
 }
 
 
-async function getTeamMessageStats(teamId, bearer) {
+async function getTeamMessageStats(teamId, bearer, continuationUrl) {
   const headers = { Authorization: `Bearer ${bearer}` };
   const cutoffDate = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000); // 30 days ago
 
@@ -203,11 +204,7 @@ async function getTeamMessageStats(teamId, bearer) {
     let recentCount = 0;
     let latest = null;
 
-    const SUBREQUEST_LIMIT = 50; // or whatever cap makes sense
-    let subrequestCount = 0;
-    let continuationToken = null;
-
-    let url = `https://graph.microsoft.com/v1.0/teams/${teamId}/channels/${targetChannel.id}/messages`;
+    let url = continuationUrl || `https://graph.microsoft.com/v1.0/teams/${teamId}/channels/${targetChannel.id}/messages`;
 
     while (url) {
 
