@@ -280,6 +280,7 @@ async function fetchAllReplies(msg, teamId, channelId, headers, cutoffDate) {
   let replyRecentCount = 0;
   let replyLatest = null;
 
+  while (replyUrl) {
     console.log(`Fetching replies from: ${replyUrl}`);
     const replyRes = await fetchWithRetry(replyUrl, { headers });
 
