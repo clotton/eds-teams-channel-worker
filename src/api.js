@@ -190,9 +190,19 @@ async function getTeamMessageStats(teamId, bearer) {
     let recentCount = 0;
     let latest = null;
 
+    const SUBREQUEST_LIMIT = 40; // or whatever cap makes sense
+    let subrequestCount = 0;
+    let continuationToken = null;
+
     let url = `https://graph.microsoft.com/v1.0/teams/${teamId}/channels/${targetChannel.id}/messages`;
 
     while (url) {
+      if (subrequestCount >= SUBREQUEST_LIMIT) {
+        partial = true;
+        break;
+      }
+      subrequestCount++;
+
       try {
         const res = await fetchWithRetry(url, { headers });
         if (!res.ok) {
@@ -215,7 +225,20 @@ async function getTeamMessageStats(teamId, bearer) {
             if (!latestMessageSoFar || ts > latestMessageSoFar) latestMessageSoFar = ts;
             if (ts >= cutoffDate) recentCount++;
           }
-          replyTasks.push(() => fetchAllReplies(msg, teamId, targetChannel.id, headers, cutoffDate));
+          // Don't enqueue reply fetching if we're hitting the limit
+          if (subrequestCount >= SUBREQUEST_LIMIT) {
+            partial = true;
+            continuationToken = url;
+            break;
+          }
+
+          subrequestCount++; // count this subrequest
+
+          replyTasks.push(() => fetchAllReplies(msg, teamId, targetChannel.id, headers, cutoffDate, () => {
+            subrequestCount++;
+            if (subrequestCount >= SUBREQUEST_LIMIT) return false; // abort replies if needed
+            return true;
+          }));
         }
 
         const repliesResults = await runWithConcurrency(replyTasks, 5);
@@ -243,7 +266,7 @@ async function getTeamMessageStats(teamId, bearer) {
       messageCount: count,
       latestMessage: latestMessageSoFar ? latestMessageSoFar.toISOString().split('T')[0] : null,
       recentCount: recentCount,
-      continuationToken: url || null, // if url is still set, we didn't finish
+      continuationToken,
       partial,
     };
   } catch (err) {
@@ -257,13 +280,15 @@ async function getTeamMessageStats(teamId, bearer) {
   }
 }
 
-async function fetchAllReplies(msg, teamId, channelId, headers, cutoffDate) {
+async function fetchAllReplies(msg, teamId, channelId, headers, cutoffDate, shouldContinue = () => true) {
   let replyUrl = `https://graph.microsoft.com/v1.0/teams/${teamId}/channels/${channelId}/messages/${msg.id}/replies`;
   let replyCount = 0;
   let replyRecentCount = 0;
   let replyLatest = null;
 
   while (replyUrl) {
+    if (!shouldContinue()) break;
+
     console.log(`Fetching replies from: ${replyUrl}`);
     const replyRes = await fetchWithRetry(replyUrl, { headers });
 
