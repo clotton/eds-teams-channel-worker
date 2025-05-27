@@ -236,7 +236,7 @@ async function getTeamMessageStats(teamId, bearer) {
 
   return {
     messageCount: totalCount,
-    latestMessage: latestMessageDate,
+    latestMessage: latestMessageDate ? new Date(latestMessageDate).toISOString().split('T')[0] : null,
     recentCount: totalRecentCount,
   };
 }
