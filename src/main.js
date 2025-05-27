@@ -129,6 +129,7 @@ export default {
             return jsonToResponse(data, getTeamMembers, env);
           }
           if (request.method === 'POST') {
+            data.env = env;
             return jsonToResponse(data, addTeamMembers, env);
           }
           break;

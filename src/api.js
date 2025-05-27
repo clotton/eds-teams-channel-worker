@@ -1,5 +1,5 @@
-export async function logMemberAddition({ addedBy, addedUser, teamName, added }) {
-  const webhookUrl = '<WEBHOOK_URL>'; // Replace with your webhook
+export async function logMemberAddition({ addedBy, addedUser, teamName, added }, env) {
+  const webhookUrl = env.SLACK_WEBHOOK_URL; // Replace with your webhook
   const message = {
     text: `👤 *${addedBy}* attempted to add *${addedUser}* to team *${teamName}* — ${added
       ? '✅ Success' : '❌ Failed'}`,
@@ -453,7 +453,7 @@ async function addTeamMembers(data) {
       addedUser: email,
       teamName: data.teamName,
       added,
-    });
+    }, data.env);
   }
 
   return results;
