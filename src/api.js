@@ -1,16 +1,3 @@
-export async function logMemberAddition({ addedBy, addedUser, teamName, added }) {
-  const webhookUrl = 'https://hooks.slack.com/services/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'; // Replace with your webhook
-  const message = {
-    text: `👤 *${addedBy}* attempted to add *${addedUser}* to team *${teamName}* — ${added
-      ? '✅ Success' : '❌ Failed'}`,
-  };
-  await fetch(webhookUrl, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(message),
-  });
-}
-
 const getUser = async (email, bearer) => {
   // prevent getting other users
   if (!email ||
@@ -179,81 +166,96 @@ async function getTeamMessageStats(teamId, bearer) {
   const headers = { Authorization: `Bearer ${bearer}` };
   const cutoffDate = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000); // 30 days ago
 
- // console.log(`Fetching channels for team ${teamId}`);
-  const channelsRes = await fetchWithRetry(`https://graph.microsoft.com/v1.0/teams/${teamId}/channels`, { headers });
-  if (!channelsRes.ok) {
-    console.error(`Failed to fetch channels: ${channelsRes.status} ${channelsRes.statusText}`);
-    return { messageCount: 0, latestMessage: null, recentCount: 0 };
-  }
+  let latestMessageSoFar = null;
+  let partial = false;
 
-  const channelsData = await channelsRes.json();
-  const channels = channelsData.value || [];
-  const channelStats = [];
+  try {
+    const channelsRes = await fetchWithRetry(`https://graph.microsoft.com/v1.0/teams/${teamId}/channels`, { headers });
+    if (!channelsRes.ok) {
+      console.error(`Failed to fetch channels: ${channelsRes.status} ${channelsRes.statusText}`);
+      return { messageCount: 0, latestMessage: null, recentCount: 0, partial: true };
+    }
 
-  for (const channel of channels) {
+    const channelsData = await channelsRes.json();
+    const channels = channelsData.value || [];
+
+    let targetChannel = channels.find(c => c.displayName.toLowerCase() === 'main')
+        || channels.find(c => c.displayName.toLowerCase() === 'general');
+
+    if (!targetChannel) {
+      return { messageCount: 0, latestMessage: null, recentCount: 0, partial: false };
+    }
+
     let count = 0;
     let recentCount = 0;
     let latest = null;
 
-    let url = `https://graph.microsoft.com/v1.0/teams/${teamId}/channels/${channel.id}/messages`;
+    let url = `https://graph.microsoft.com/v1.0/teams/${teamId}/channels/${targetChannel.id}/messages`;
 
     while (url) {
-  //    console.log(`Fetching messages from: ${url}`);
-      const res = await fetchWithRetry(url, { headers });
+      try {
+        const res = await fetchWithRetry(url, { headers });
+        if (!res.ok) {
+          const errorText = await res.text();
+          console.error(`Error fetching messages: ${res.status} ${res.statusText}\n${errorText}`);
+          partial = true;
+          break;
+        }
 
-      if (!res.ok) {
-        const errorText = await res.text();
-        console.error(`Error fetching messages: ${res.status} ${res.statusText}\n${errorText}`);
+        const data = await res.json();
+        const messages = data.value || [];
+
+        const replyTasks = [];
+
+        for (const msg of messages) {
+          if (msg.from?.user) {
+            count++;
+            const ts = new Date(msg.lastModifiedDateTime || msg.createdDateTime);
+            if (!latest || ts > latest) latest = ts;
+            if (!latestMessageSoFar || ts > latestMessageSoFar) latestMessageSoFar = ts;
+            if (ts >= cutoffDate) recentCount++;
+          }
+          replyTasks.push(() => fetchAllReplies(msg, teamId, targetChannel.id, headers, cutoffDate));
+        }
+
+        const repliesResults = await runWithConcurrency(replyTasks, 5);
+        for (const { replyCount, replyRecentCount, replyLatest } of repliesResults) {
+          count += replyCount;
+          recentCount += replyRecentCount;
+          if (replyLatest) {
+            if (!latest || replyLatest > latest) latest = replyLatest;
+            if (!latestMessageSoFar || replyLatest > latestMessageSoFar) latestMessageSoFar = replyLatest;
+          }
+        }
+
+        const nextLink = data['@odata.nextLink'] || null;
+        if (!nextLink) break;
+
+        url = nextLink;
+      } catch (err) {
+        console.error('Error during message fetching loop:', err);
+        partial = true;
         break;
       }
-
-      const data = await res.json();
-      const messages = data.value || [];
-
-      // Prepare reply fetching tasks
-      const replyTasks = [];
-
-      for (const msg of messages) {
-        if (msg.from?.user) {
-          count++;
-          const ts = new Date(msg.lastModifiedDateTime || msg.createdDateTime);
-          if (!latest || ts > latest) latest = ts;
-          if (ts >= cutoffDate) recentCount++;
-        }
-        // Add reply fetch task
-        replyTasks.push(() => fetchAllReplies(msg, teamId, channel.id, headers, cutoffDate));
-      }
-
-      // Run reply fetches with limited concurrency
-      const repliesResults = await runWithConcurrency(replyTasks, 5);
-
-      for (const { replyCount, replyRecentCount, replyLatest } of repliesResults) {
-        count += replyCount;
-        recentCount += replyRecentCount;
-        if (!latest || (replyLatest && replyLatest > latest)) latest = replyLatest;
-      }
-
-      url = data['@odata.nextLink'] || null;
     }
 
-    channelStats.push({ count, latest, recentCount });
+    return {
+      messageCount: count,
+      latestMessage: latestMessageSoFar ? latestMessageSoFar.toISOString().split('T')[0] : null,
+      recentCount: recentCount,
+      continuationToken: url || null, // if url is still set, we didn't finish
+      partial,
+    };
+  } catch (err) {
+    console.error('Error in getTeamMessageStats:', err);
+    return {
+      messageCount: 0,
+      latestMessage: null,
+      recentCount: 0,
+      partial: true,
+    };
   }
-
-  const totalCount = channelStats.reduce((sum, r) => sum + r.count, 0);
-  const totalRecentCount = channelStats.reduce((sum, r) => sum + r.recentCount, 0);
-  const latestMessageDate = channelStats.reduce((latest, r) => {
-    if (!latest) return r.latest;
-    if (!r.latest) return latest;
-    return r.latest > latest ? r.latest : latest;
-  }, null);
-
-  return {
-    messageCount: totalCount,
-    latestMessage: latestMessageDate,
-    recentCount: totalRecentCount,
-  };
 }
-
 
 async function fetchAllReplies(msg, teamId, channelId, headers, cutoffDate) {
   let replyUrl = `https://graph.microsoft.com/v1.0/teams/${teamId}/channels/${channelId}/messages/${msg.id}/replies`;
@@ -262,7 +264,7 @@ async function fetchAllReplies(msg, teamId, channelId, headers, cutoffDate) {
   let replyLatest = null;
 
   while (replyUrl) {
-   // console.log(`Fetching replies from: ${replyUrl}`);
+    console.log(`Fetching replies from: ${replyUrl}`);
     const replyRes = await fetchWithRetry(replyUrl, { headers });
 
     if (!replyRes.ok) {
@@ -410,28 +412,25 @@ async function addTeamMembers(data) {
   }
   data.teamName = team.displayName || '';
   // Loop over the full user objects: { displayName, email }
-  const uniqueUsers = Array.from(new Map(data.body.users.map(u => [u.email, u])).values());
-  for (const user of uniqueUsers) {
-    const { displayName , email } = user;
+  for (const user of data.body) {
+    const { email, displayName } = user;
 
     const userId = await ensureGuestUser({...data, email, displayName });
     let added = false;
 
     if (userId) {
       const response = await addGuestToTeam({ ...data, userId });
-      if (response.status === 400 || response.status === 204) {
+
+      if (response.status === 400) {
+        console.log("User already in team", email);
+      }
+
+      if (response.status === 204) {
         added = true;
       }
     }
-    results.push({ email, added });
 
-    // Log the member addition
-    await logMemberAddition({
-      addedBy: data.body.addedBy, // Ensure this is set in data
-      addedUser: email,
-      teamName: data.teamName,
-      added,
-    });
+    results.push({ email, added });
   }
 
   return results;
