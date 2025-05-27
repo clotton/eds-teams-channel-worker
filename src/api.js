@@ -234,11 +234,17 @@ async function getTeamMessageStats(teamId, bearer) {
 
           subrequestCount++; // count this subrequest
 
-          replyTasks.push(() => fetchAllReplies(msg, teamId, targetChannel.id, headers, cutoffDate, () => {
+          replyTasks.push(() => {
+            // Decide whether to run or skip at task execution time
+            if (subrequestCount >= SUBREQUEST_LIMIT) {
+              partial = true;
+              return Promise.resolve({ replyCount: 0, replyRecentCount: 0, replyLatest: null });
+            }
+
             subrequestCount++;
-            if (subrequestCount >= SUBREQUEST_LIMIT) return false; // abort replies if needed
-            return true;
-          }));
+            return fetchAllReplies(msg, teamId, targetChannel.id, headers, cutoffDate);
+          });
+
         }
 
         const repliesResults = await runWithConcurrency(replyTasks, 5);
