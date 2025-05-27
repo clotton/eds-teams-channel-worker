@@ -178,28 +178,26 @@ async function getMessageStatsWithThrottling(data) {
   });
 }
 
-
 async function getTeamMessageStats(teamId, bearer) {
   const headers = { Authorization: `Bearer ${bearer}` };
-  const now = new Date();
-  const cutoffDate = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000); // 30 days ago
+  const cutoffDate = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000); // 30 days ago
 
   console.log(`Fetching channels for team ${teamId}`);
   const channelsRes = await fetchWithRetry(`https://graph.microsoft.com/v1.0/teams/${teamId}/channels`, { headers });
-
   if (!channelsRes.ok) {
     console.error(`Failed to fetch channels: ${channelsRes.status} ${channelsRes.statusText}`);
-    return { count: 0, latestMessageDate: null, recentCount: 0 };
+    return { messageCount: 0, latestMessage: null, recentCount: 0 };
   }
 
-  const channels = (await channelsRes.json()).value || [];
-
-  const results = [];
+  const channelsData = await channelsRes.json();
+  const channels = channelsData.value || [];
+  const channelStats = [];
 
   for (const channel of channels) {
     let count = 0;
     let recentCount = 0;
     let latest = null;
+
     let url = `https://graph.microsoft.com/v1.0/teams/${teamId}/channels/${channel.id}/messages`;
 
     while (url) {
@@ -208,14 +206,15 @@ async function getTeamMessageStats(teamId, bearer) {
 
       if (!res.ok) {
         const errorText = await res.text();
-        console.error(`Error fetching messages: ${res.status} ${res.statusText}`);
-        console.error(`URL: ${url}`);
-        console.error(`Response: ${errorText}`);
+        console.error(`Error fetching messages: ${res.status} ${res.statusText}\n${errorText}`);
         break;
       }
 
       const data = await res.json();
       const messages = data.value || [];
+
+      // Prepare reply fetching tasks
+      const replyTasks = [];
 
       for (const msg of messages) {
         if (msg.from?.user) {
@@ -224,53 +223,98 @@ async function getTeamMessageStats(teamId, bearer) {
           if (!latest || ts > latest) latest = ts;
           if (ts >= cutoffDate) recentCount++;
         }
-
-        let replyUrl = `https://graph.microsoft.com/v1.0/teams/${teamId}/channels/${channel.id}/messages/${msg.id}/replies`;
-        while (replyUrl) {
-          console.log(`Fetching replies from: ${replyUrl}`);
-          const replyRes = await fetchWithRetry(replyUrl, { headers });
-
-          if (!replyRes.ok) {
-            const replyErrorText = await replyRes.text();
-            console.error(`Error fetching replies: ${replyRes.status} ${replyRes.statusText}`);
-            console.error(`URL: ${replyUrl}`);
-            console.error(`Response: ${replyErrorText}`);
-            break;
-          }
-
-          const replyData = await replyRes.json();
-          const replies = replyData.value || [];
-
-          for (const reply of replies) {
-            if (reply.from?.user) {
-              count++;
-              const ts = new Date(reply.lastModifiedDateTime || reply.createdDateTime);
-              if (!latest || ts > latest) latest = ts;
-              if (ts >= cutoffDate) recentCount++;
-            }
-          }
-
-          replyUrl = replyData['@odata.nextLink'];
-        }
+        // Add reply fetch task
+        replyTasks.push(() => fetchAllReplies(msg, teamId, channel.id, headers, cutoffDate));
       }
 
-      url = data['@odata.nextLink'];
+      // Run reply fetches with limited concurrency
+      const repliesResults = await runWithConcurrency(replyTasks, 5);
+
+      for (const { replyCount, replyRecentCount, replyLatest } of repliesResults) {
+        count += replyCount;
+        recentCount += replyRecentCount;
+        if (!latest || (replyLatest && replyLatest > latest)) latest = replyLatest;
+      }
+
+      url = data['@odata.nextLink'] || null;
     }
 
-    results.push({ count, latest, recentCount });
+    channelStats.push({ count, latest, recentCount });
   }
 
-  const totalCount = results.reduce((sum, r) => sum + r.count, 0);
-  const recentCount = results.reduce((sum, r) => sum + r.recentCount, 0);
-  const latestMessageDate = results.reduce((latest, r) =>
-          !latest || (r.latest && r.latest > latest) ? r.latest : latest,
-      null
-  );
+  const totalCount = channelStats.reduce((sum, r) => sum + r.count, 0);
+  const totalRecentCount = channelStats.reduce((sum, r) => sum + r.recentCount, 0);
+  const latestMessageDate = channelStats.reduce((latest, r) => {
+    if (!latest) return r.latest;
+    if (!r.latest) return latest;
+    return r.latest > latest ? r.latest : latest;
+  }, null);
 
-  return { messageCount: totalCount, latestMessage: latestMessageDate, recentCount };
+  return {
+    messageCount: totalCount,
+    latestMessage: latestMessageDate,
+    recentCount: totalRecentCount,
+  };
 }
 
 
+
+async function fetchAllReplies(msg, teamId, channelId, headers, cutoffDate) {
+  let replyUrl = `https://graph.microsoft.com/v1.0/teams/${teamId}/channels/${channelId}/messages/${msg.id}/replies`;
+  let replyCount = 0;
+  let replyRecentCount = 0;
+  let replyLatest = null;
+
+  while (replyUrl) {
+    console.log(`Fetching replies from: ${replyUrl}`);
+    const replyRes = await fetchWithRetry(replyUrl, { headers });
+
+    if (!replyRes.ok) {
+      const errorText = await replyRes.text();
+      console.error(`Error fetching replies: ${replyRes.status} ${replyRes.statusText}`);
+      console.error(`URL: ${replyUrl}`);
+      console.error(`Response: ${errorText}`);
+      break;
+    }
+
+    const replyData = await replyRes.json();
+    const replies = replyData.value || [];
+
+    for (const reply of replies) {
+      if (reply.from?.user) {
+        replyCount++;
+        const ts = new Date(reply.lastModifiedDateTime || reply.createdDateTime);
+        if (!replyLatest || ts > replyLatest) replyLatest = ts;
+        if (ts >= cutoffDate) replyRecentCount++;
+      }
+    }
+
+    replyUrl = replyData['@odata.nextLink'];
+  }
+
+  return { replyCount, replyRecentCount, replyLatest };
+}
+
+async function runWithConcurrency(tasks, limit) {
+  const results = [];
+  let index = 0;
+
+  async function worker() {
+    while (index < tasks.length) {
+      const i = index++;
+      try {
+        results[i] = await tasks[i]();
+      } catch (e) {
+        console.error(`Error in task ${i}:`, e);
+        results[i] = { replyCount: 0, replyRecentCount: 0, replyLatest: null };
+      }
+    }
+  }
+
+  const workers = Array.from({ length: limit }, worker);
+  await Promise.all(workers);
+  return results;
+}
 
 async function inviteUser(data) {
   const url = `https://graph.microsoft.com/v1.0/invitations`;
