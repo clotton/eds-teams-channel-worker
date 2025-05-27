@@ -243,6 +243,7 @@ async function getTeamMessageStats(teamId, bearer) {
       messageCount: count,
       latestMessage: latestMessageSoFar ? latestMessageSoFar.toISOString().split('T')[0] : null,
       recentCount: recentCount,
+      continuationToken: url || null, // if url is still set, we didn't finish
       partial,
     };
   } catch (err) {
