@@ -1,13 +1,12 @@
-import pLimit from 'p-limit';
 const getUser = async (email, bearer) => {
   // prevent getting other users
   if (!email ||
-    (
-      !email.endsWith('@adobe.com') &&
-      !email.toLowerCase().endsWith('@AdobeEnterpriseSupportAEM.onmicrosoft.com'.toLowerCase()))
-    ) return null;
+      (
+          !email.endsWith('@adobe.com') &&
+          !email.toLowerCase().endsWith('@AdobeEnterpriseSupportAEM.onmicrosoft.com'.toLowerCase()))
+  ) return null;
 
-   const params = new URLSearchParams({
+  const params = new URLSearchParams({
     '$filter': `endsWith(mail,'${email}')`,
     '$select': 'id,mail,displayName',
     '$count': 'true'
@@ -130,7 +129,7 @@ const getAllTeams = async (data) => {
       const name = o.displayName?.toLowerCase() || '';
       const desc = o.description?.toLowerCase() || '';
       return name.includes(data.nameFilter.toLowerCase()) &&
-        desc.includes(data.descriptionFilter.toLowerCase());
+          desc.includes(data.descriptionFilter.toLowerCase());
     })
     .map(o => ({
       id: o.id,
@@ -142,9 +141,46 @@ const getAllTeams = async (data) => {
   return null;
 };
 
-async function getTeamMessageStats(data) {
-  const headers = { Authorization: `Bearer ${data.bearer}` };
-  const teamId = data.body.teamIds;
+const MAX_CONCURRENT = 20;
+const RETRY_DELAY = 1000; // ms
+
+async function getMessageStatsWithThrottling(data) {
+  const teamIds = data.body.teamIds || [];
+
+  const results = {};
+  const queue = [...teamIds];
+  let active = 0;
+
+  return new Promise((resolve) => {
+    const next = () => {
+      if (queue.length === 0 && active === 0) return resolve(results);
+
+      while (active < MAX_CONCURRENT && queue.length > 0) {
+        const teamId = queue.shift();
+        active++;
+
+        getTeamMessageStats(teamId, data.bearer)
+        .then((stats) => {
+          results[teamId] = stats;
+        })
+        .catch((err) => {
+          console.error(`Error for team ${teamId}:`, err);
+          results[teamId] = { error: true };
+        })
+        .finally(() => {
+          active--;
+          setTimeout(next, RETRY_DELAY); // slight spacing to reduce pressure
+        });
+      }
+    };
+
+    next();
+  });
+}
+
+
+async function getTeamMessageStats(teamId, bearer) {
+  const headers = { Authorization: `Bearer ${bearer}` };
   const now = new Date();
   const cutoffDate = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000); // 30 days ago
 
@@ -298,7 +334,7 @@ async function ensureGuestUser(data) {
   const user = await getUser(data.email, data.bearer);
   if (user?.notFound) {
     console.log("User not found, inviting to team", data.email);
-   const invite = await inviteToTeam(data);
+    const invite = await inviteToTeam(data);
     if (invite) {
       return invite.invitedUser.id;
     }
@@ -318,10 +354,10 @@ async function addGuestToTeam(data) {
     '@odata.id': `https://graph.microsoft.com/v1.0/directoryObjects/${data.userId}`
   }
   return await fetch(url, {
-      method: 'POST',
-      headers,
-      body: JSON.stringify(body),
-    });
+    method: 'POST',
+    headers,
+    body: JSON.stringify(body),
+  });
 }
 
 async function addTeamMembers(data) {
@@ -381,6 +417,6 @@ export {
   getTeamMembers,
   getTeamById,
   getAllTeams,
-  getTeamMessageStats,
+  getMessageStatsWithThrottling,
   inviteUser
 }
