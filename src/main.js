@@ -6,7 +6,7 @@ import {
   getTeamMembers,
   getUserTeams,
   inviteUser,
-  getMessageStatsWithThrottling
+  handleMessageStatsRequest
 } from "./api";
 
 const options = async (request, env) => {
@@ -120,7 +120,7 @@ export default {
         }
         case 'teams-messages': {
           if (request.method === 'POST') {
-            return jsonToResponse(data, getMessageStatsWithThrottling, env);
+            return jsonToResponse(data, handleMessageStatsRequest, env);
           }
           break;
         }

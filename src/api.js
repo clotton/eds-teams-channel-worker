@@ -141,42 +141,26 @@ const getAllTeams = async (data) => {
   return null;
 };
 
-const MAX_CONCURRENT = 20;
-const RETRY_DELAY = 1000; // ms
+async function handleMessageStatsRequest(data) {
+  const teamId = data.body.teamId;
+  const bearer = data.bearer; // optionally inject this if auth is required
 
-async function getMessageStatsWithThrottling(data) {
-  const teamIds = data.body.teamIds || [];
+  if (!teamId) {
+    return new Response('Missing teamId', { status: 400 });
+  }
 
-  const results = {};
-  const queue = [...teamIds];
-  let active = 0;
-
-  return new Promise((resolve) => {
-    const next = () => {
-      if (queue.length === 0 && active === 0) return resolve(results);
-
-      while (active < MAX_CONCURRENT && queue.length > 0) {
-        const teamId = queue.shift();
-        active++;
-
-        getTeamMessageStats(teamId, data.bearer)
-        .then((stats) => {
-          results[teamId] = stats;
-        })
-        .catch((err) => {
-          console.error(`Error for team ${teamId}:`, err);
-          results[teamId] = { error: true };
-        })
-        .finally(() => {
-          active--;
-          setTimeout(next, RETRY_DELAY); // slight spacing to reduce pressure
-        });
-      }
-    };
-
-    next();
-  });
+  try {
+    const stats = await getTeamMessageStats(teamId, bearer);
+    return stats;
+  } catch (err) {
+    console.error(`Error fetching stats for team ${teamId}:`, err);
+    return new Response(JSON.stringify({ error: true }), {
+      headers: { 'Content-Type': 'application/json' },
+      status: 500,
+    });
+  }
 }
+
 
 async function getTeamMessageStats(teamId, bearer) {
   const headers = { Authorization: `Bearer ${bearer}` };
@@ -256,7 +240,6 @@ async function getTeamMessageStats(teamId, bearer) {
     recentCount: totalRecentCount,
   };
 }
-
 
 
 async function fetchAllReplies(msg, teamId, channelId, headers, cutoffDate) {
@@ -461,6 +444,6 @@ export {
   getTeamMembers,
   getTeamById,
   getAllTeams,
-  getMessageStatsWithThrottling,
+  handleMessageStatsRequest,
   inviteUser
 }
