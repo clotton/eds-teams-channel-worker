@@ -167,29 +167,25 @@ async function getTeamMessageStats(teamId, bearer) {
   const cutoffDate = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000); // 30 days ago
 
   let latestMessageSoFar = null;
+  let partial = false;
 
   try {
     const channelsRes = await fetchWithRetry(`https://graph.microsoft.com/v1.0/teams/${teamId}/channels`, { headers });
     if (!channelsRes.ok) {
       console.error(`Failed to fetch channels: ${channelsRes.status} ${channelsRes.statusText}`);
-      return { messageCount: 0, latestMessage: null, recentCount: 0 };
+      return { messageCount: 0, latestMessage: null, recentCount: 0, partial: true };
     }
 
     const channelsData = await channelsRes.json();
     const channels = channelsData.value || [];
 
-    // Find 'main' or fallback to 'general'
-    let targetChannel = channels.find(c => c.displayName.toLowerCase() === 'main');
-    if (!targetChannel) {
-      targetChannel = channels.find(c => c.displayName.toLowerCase() === 'general');
-    }
+    let targetChannel = channels.find(c => c.displayName.toLowerCase() === 'main')
+        || channels.find(c => c.displayName.toLowerCase() === 'general');
 
     if (!targetChannel) {
-      // No channel found matching either name
-      return { messageCount: 0, latestMessage: null, recentCount: 0 };
+      return { messageCount: 0, latestMessage: null, recentCount: 0, partial: false };
     }
 
-    // Process only the target channel
     let count = 0;
     let recentCount = 0;
     let latest = null;
@@ -202,6 +198,7 @@ async function getTeamMessageStats(teamId, bearer) {
         if (!res.ok) {
           const errorText = await res.text();
           console.error(`Error fetching messages: ${res.status} ${res.statusText}\n${errorText}`);
+          partial = true;
           break;
         }
 
@@ -231,9 +228,13 @@ async function getTeamMessageStats(teamId, bearer) {
           }
         }
 
-        url = data['@odata.nextLink'] || null;
+        const nextLink = data['@odata.nextLink'] || null;
+        if (!nextLink) break;
+
+        url = nextLink;
       } catch (err) {
         console.error('Error during message fetching loop:', err);
+        partial = true;
         break;
       }
     }
@@ -242,6 +243,7 @@ async function getTeamMessageStats(teamId, bearer) {
       messageCount: count,
       latestMessage: latestMessageSoFar ? latestMessageSoFar.toISOString().split('T')[0] : null,
       recentCount: recentCount,
+      partial,
     };
   } catch (err) {
     console.error('Error in getTeamMessageStats:', err);
@@ -249,6 +251,7 @@ async function getTeamMessageStats(teamId, bearer) {
       messageCount: 0,
       latestMessage: null,
       recentCount: 0,
+      partial: true,
     };
   }
 }
