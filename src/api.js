@@ -1,3 +1,16 @@
+export async function logMemberAddition({ addedBy, addedUser, teamName, added }) {
+  const webhookUrl = 'https://hooks.slack.com/services/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'; // Replace with your webhook
+  const message = {
+    text: `👤 *${addedBy}* attempted to add *${addedUser}* to team *${teamName}* — ${added
+      ? '✅ Success' : '❌ Failed'}`,
+  };
+  await fetch(webhookUrl, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(message),
+  });
+}
+
 const getUser = async (email, bearer) => {
   // prevent getting other users
   if (!email ||
@@ -443,25 +456,29 @@ async function addTeamMembers(data) {
   }
   data.teamName = team.displayName || '';
   // Loop over the full user objects: { displayName, email }
-  for (const user of data.body) {
-    const { email, displayName } = user;
+  const uniqueUsers = Array.from(new Map(data.body.users.map(u => [u.email, u])).values());
+  for (const user of uniqueUsers) {
+    const { displayName , email } = user;
 
     const userId = await ensureGuestUser({...data, email, displayName });
     let added = false;
 
     if (userId) {
       const response = await addGuestToTeam({ ...data, userId });
-
-      if (response.status === 400) {
-        console.log("User already in team", email);
-      }
-
-      if (response.status === 204) {
+      if (response.status === 400 || response.status === 204) {
         added = true;
       }
     }
 
     results.push({ email, added });
+
+    // Log the member addition
+    await logMemberAddition({
+      addedBy: data.body.addedBy, // Ensure this is set in data
+      addedUser: email,
+      teamName: data.teamName,
+      added,
+    });
   }
 
   return results;
