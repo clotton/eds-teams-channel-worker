@@ -166,8 +166,7 @@ async function getTeamMessageStats(teamId, bearer) {
   const headers = { Authorization: `Bearer ${bearer}` };
   const cutoffDate = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000); // 30 days ago
 
-  const channelStats = [];
-  let latestMessageSoFar = null;  // Track latest date globally
+  let latestMessageSoFar = null;
 
   try {
     const channelsRes = await fetchWithRetry(`https://graph.microsoft.com/v1.0/teams/${teamId}/channels`, { headers });
@@ -179,82 +178,80 @@ async function getTeamMessageStats(teamId, bearer) {
     const channelsData = await channelsRes.json();
     const channels = channelsData.value || [];
 
-    for (const channel of channels) {
-      let count = 0;
-      let recentCount = 0;
-      let latest = null;
-
-      let url = `https://graph.microsoft.com/v1.0/teams/${teamId}/channels/${channel.id}/messages`;
-
-      while (url) {
-        try {
-          const res = await fetchWithRetry(url, { headers });
-          if (!res.ok) {
-            const errorText = await res.text();
-            console.error(`Error fetching messages: ${res.status} ${res.statusText}\n${errorText}`);
-            break; // stop paging this channel
-          }
-
-          const data = await res.json();
-          const messages = data.value || [];
-
-          const replyTasks = [];
-
-          for (const msg of messages) {
-            if (msg.from?.user) {
-              count++;
-              const ts = new Date(msg.lastModifiedDateTime || msg.createdDateTime);
-              if (!latest || ts > latest) latest = ts;
-              if (!latestMessageSoFar || ts > latestMessageSoFar) latestMessageSoFar = ts;
-              if (ts >= cutoffDate) recentCount++;
-            }
-            replyTasks.push(() => fetchAllReplies(msg, teamId, channel.id, headers, cutoffDate));
-          }
-
-          const repliesResults = await runWithConcurrency(replyTasks, 5);
-          for (const { replyCount, replyRecentCount, replyLatest } of repliesResults) {
-            count += replyCount;
-            recentCount += replyRecentCount;
-            if (replyLatest) {
-              if (!latest || replyLatest > latest) latest = replyLatest;
-              if (!latestMessageSoFar || replyLatest > latestMessageSoFar) latestMessageSoFar = replyLatest;
-            }
-          }
-
-          url = data['@odata.nextLink'] || null;
-        } catch (err) {
-          console.error('Error during message fetching loop:', err);
-          // Break out of while loop on error to avoid partial incomplete fetches
-          break;
-        }
-      }
-
-      channelStats.push({ count, latest, recentCount });
+    // Find 'main' or fallback to 'general'
+    let targetChannel = channels.find(c => c.displayName.toLowerCase() === 'main');
+    if (!targetChannel) {
+      targetChannel = channels.find(c => c.displayName.toLowerCase() === 'general');
     }
 
+    if (!targetChannel) {
+      // No channel found matching either name
+      return { messageCount: 0, latestMessage: null, recentCount: 0 };
+    }
+
+    // Process only the target channel
+    let count = 0;
+    let recentCount = 0;
+    let latest = null;
+
+    let url = `https://graph.microsoft.com/v1.0/teams/${teamId}/channels/${targetChannel.id}/messages`;
+
+    while (url) {
+      try {
+        const res = await fetchWithRetry(url, { headers });
+        if (!res.ok) {
+          const errorText = await res.text();
+          console.error(`Error fetching messages: ${res.status} ${res.statusText}\n${errorText}`);
+          break;
+        }
+
+        const data = await res.json();
+        const messages = data.value || [];
+
+        const replyTasks = [];
+
+        for (const msg of messages) {
+          if (msg.from?.user) {
+            count++;
+            const ts = new Date(msg.lastModifiedDateTime || msg.createdDateTime);
+            if (!latest || ts > latest) latest = ts;
+            if (!latestMessageSoFar || ts > latestMessageSoFar) latestMessageSoFar = ts;
+            if (ts >= cutoffDate) recentCount++;
+          }
+          replyTasks.push(() => fetchAllReplies(msg, teamId, targetChannel.id, headers, cutoffDate));
+        }
+
+        const repliesResults = await runWithConcurrency(replyTasks, 5);
+        for (const { replyCount, replyRecentCount, replyLatest } of repliesResults) {
+          count += replyCount;
+          recentCount += replyRecentCount;
+          if (replyLatest) {
+            if (!latest || replyLatest > latest) latest = replyLatest;
+            if (!latestMessageSoFar || replyLatest > latestMessageSoFar) latestMessageSoFar = replyLatest;
+          }
+        }
+
+        url = data['@odata.nextLink'] || null;
+      } catch (err) {
+        console.error('Error during message fetching loop:', err);
+        break;
+      }
+    }
+
+    return {
+      messageCount: count,
+      latestMessage: latestMessageSoFar ? latestMessageSoFar.toISOString().split('T')[0] : null,
+      recentCount: recentCount,
+    };
   } catch (err) {
     console.error('Error in getTeamMessageStats:', err);
-    // Instead of null, return what you have so far:
-    const totalCount = channelStats.reduce((sum, r) => sum + r.count, 0);
-    const totalRecentCount = channelStats.reduce((sum, r) => sum + r.recentCount, 0);
     return {
-      messageCount: totalCount,
-      latestMessage: latestMessageSoFar ? latestMessageSoFar.toISOString().split('T')[0] : null,
-      recentCount: totalRecentCount,
+      messageCount: 0,
+      latestMessage: null,
+      recentCount: 0,
     };
   }
-
-  const totalCount = channelStats.reduce((sum, r) => sum + r.count, 0);
-  const totalRecentCount = channelStats.reduce((sum, r) => sum + r.recentCount, 0);
-
-  return {
-    messageCount: totalCount,
-    latestMessage: latestMessageSoFar ? latestMessageSoFar.toISOString().split('T')[0] : null,
-    recentCount: totalRecentCount,
-  };
 }
-
-
 
 async function fetchAllReplies(msg, teamId, channelId, headers, cutoffDate) {
   let replyUrl = `https://graph.microsoft.com/v1.0/teams/${teamId}/channels/${channelId}/messages/${msg.id}/replies`;
