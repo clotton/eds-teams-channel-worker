@@ -1,5 +1,5 @@
 export async function logMemberAddition({ addedBy, addedUser, teamName, added }) {
-  const webhookUrl = 'https://hooks.slack.com/services/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'; // Replace with your webhook
+  const webhookUrl = '<WEBHOOK_URL>'; // Replace with your webhook
   const message = {
     text: `👤 *${addedBy}* attempted to add *${addedUser}* to team *${teamName}* — ${added
       ? '✅ Success' : '❌ Failed'}`,
