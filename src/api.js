@@ -203,6 +203,10 @@ async function getTeamMessageStats(teamId, bearer) {
     let recentCount = 0;
     let latest = null;
 
+    const SUBREQUEST_LIMIT = 50; // or whatever cap makes sense
+    let subrequestCount = 0;
+    let continuationToken = null;
+
     let url = `https://graph.microsoft.com/v1.0/teams/${teamId}/channels/${targetChannel.id}/messages`;
 
     while (url) {
@@ -261,6 +265,7 @@ async function getTeamMessageStats(teamId, bearer) {
       messageCount: count,
       latestMessage: latestMessageSoFar ? latestMessageSoFar.toISOString().split('T')[0] : null,
       recentCount: recentCount,
+      continuationToken: partial ? url : null,
       partial,
     };
   } catch (err) {
