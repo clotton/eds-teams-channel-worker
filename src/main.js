@@ -90,7 +90,7 @@ export default {
       switch (action) {
         case 'teams': {
             data.nameFilter = searchParams.get("nameFilter") || '';
-            data. descriptionFilter = searchParams.get("descriptionFilter") || '';
+            data.descriptionFilter = searchParams.get("descriptionFilter") || '';
             return jsonToResponse(data, getAllTeams, env);
         }
         case 'teams-summary': {

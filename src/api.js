@@ -37,10 +37,6 @@ const getUser = async (email, bearer) => {
     headers,
   });
 
-  if (res.status === 404) {
-    return { notFound: true };
-  }
-
   const json = await res.json();
   if (json.value && json.value.length > 0) {
     return json.value[0];
@@ -164,8 +160,7 @@ async function handleMessageStatsRequest(data) {
   }
 
   try {
-    const stats = await getTeamMessageStats(teamId, bearer, continuationUrl);
-    return stats;
+    return await getTeamMessageStats(teamId, bearer, continuationUrl);
   } catch (err) {
     console.error(`Error fetching stats for team ${teamId}:`, err);
     return new Response(JSON.stringify({ error: true }), {
@@ -393,14 +388,14 @@ async function inviteToTeam(data) {
 // Invite guest if not in directory, else retrieve existing user
 async function ensureGuestUser(data) {
   const user = await getUser(data.email, data.bearer);
-  if (user?.notFound) {
+  if (!user)  {
     console.log("User not found, inviting to team", data.email);
     const invite = await inviteToTeam(data);
     if (invite) {
       return invite.invitedUser.id;
     }
   }
-  console.log("User found", user);
+
   if (user?.id) return user.id;
   return null;
 }
