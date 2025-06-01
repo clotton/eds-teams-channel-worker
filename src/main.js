@@ -54,7 +54,61 @@ async function getGraphToken(env) {
   return json.access_token;
 }
 
+async function fetchAndCacheAllTeamStats(env) {
+  try {
+    const bearer = await getGraphToken(env);
+    if (!bearer) {
+      console.error('Failed to get Graph token');
+      return;
+    }
+
+    const teams = await getAllTeams({ bearer });
+    if (!teams || teams.length === 0) {
+      console.warn('No teams found');
+      return;
+    }
+
+    await Promise.all(teams.map(async (team) => {
+      const teamDetails = await getTeamById({ id: team.id, bearer });
+
+      if (!teamDetails) {
+        console.warn(`Error fetching team ${team.id} details`);
+        return null;
+      }
+
+      let teamSummary = {
+        teamId: team.id,
+        teamName: teamDetails.displayName || '',
+        description: teamDetails.description || '',
+        created: teamDetails.createdDateTime,
+        memberCount: teamDetails.summary.guestsCount + teamDetails.summary.membersCount,
+        webUrl: teamDetails.webUrl || '',
+      };
+
+      // Cache the summaries in KV or any other storage
+      await env.TEAMS_KV.put(team.id, JSON.stringify(teamSummary));
+
+      return {
+        teamId: team.id,
+        teamName: teamDetails.displayName || '',
+        description: teamDetails.description || '',
+        created: teamDetails.createdDateTime,
+        memberCount: teamDetails.summary.guestsCount + teamDetails.summary.membersCount,
+        webUrl: teamDetails.webUrl || '',
+      };
+    }));
+
+
+  } catch (error) {
+    console.error('Error fetching and caching all team stats:', error);
+  }
+}
+
+
 export default {
+  async scheduled(event, env, ctx) {
+    ctx.waitUntil(fetchAndCacheAllTeamStats(env));
+  },
   async fetch(request, env) {
     try {
       const url = new URL(request.url);
