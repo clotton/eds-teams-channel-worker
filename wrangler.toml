@@ -4,10 +4,9 @@ compatibility_date = "2025-04-16"
 workers_dev = true
 preview_urls = false
 main = "src/main.js"
-[env.dev]
 
 [triggers]
-crons = ["0 * * * *"] # every hour
+crons = ["*/15 * * * *"]
 
 [[kv_namespaces]]
 binding = "TEAMS_KV"
