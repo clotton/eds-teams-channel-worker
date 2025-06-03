@@ -185,11 +185,15 @@ async function getTeamMessageStats(teamId, bearer) {
   let count = 0;
   let recentCount = 0;
   let latest = null;
-  let url = `https://graph.microsoft.com/v1.0/teams/${teamId}/channels/${targetChannel.id}/messages?$filter=messageType eq 'message'`;
+  let url = `https://graph.microsoft.com/v1.0/teams/${teamId}/channels/${targetChannel.id}/messages'`;
 
   while (url) {
     const res = await fetchWithRetry(url, { headers });
-    if (!res.ok) break;
+    if (!res.ok) {
+      const errorText = await res.text();
+      console.error(`Failed to fetch threads for ${teamId} (status ${res.status}): ${errorText}`);
+      break; // or consider `continue` or `throw` based on strictness
+    }
 
     const data = await res.json();
     const messages = data.value || [];
@@ -208,7 +212,11 @@ async function getTeamMessageStats(teamId, bearer) {
 
       while (replyUrl) {
         const replyRes = await fetchWithRetry(replyUrl, { headers });
-        if (!replyRes.ok) break;
+        if (!replyRes.ok) {
+          const errorText = await replyRes.text();
+          console.error(`Failed to fetch replies for message ${msg.id} (status ${replyRes.status}): ${errorText}`);
+          break; // or consider `continue` or `throw` based on strictness
+        }
 
         const replyData = await replyRes.json();
         const replies = replyData.value || [];
