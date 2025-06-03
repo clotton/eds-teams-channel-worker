@@ -39,7 +39,7 @@ const jsonToResponse = async (data, fct) => {
   }
 };
 
-const jsonToResponse = async (data, fct, env) => {
+const jsonToResponseEnv = async (data, fct, env) => {
   try {
     const json = await fct(data, env);
     return new Response(JSON.stringify(json || 'Not found'), {
@@ -194,7 +194,7 @@ export default {
         }
         case 'teams-messages': {
           if (request.method === 'POST') {
-            return jsonToResponse(data, handleMessageStatsRequest, env);
+            return jsonToResponseEnv(data, handleMessageStatsRequest, env);
           }
           break;
         }
