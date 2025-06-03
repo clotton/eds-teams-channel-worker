@@ -97,7 +97,7 @@ async function generateJobs(env) {
 
   const teams = await getAllTeams(data);
   return teams.map(team => ({
-    body: JSON.stringify({ teamId: team.id })
+    body: team.id
   }));
 }
 
@@ -109,7 +109,7 @@ export default {
 
   async queue(batch, env, ctx) {
     for (const msg of batch.messages) {
-      ctx.waitUntil(processTeamStats(msg.body.teamId, env));
+      ctx.waitUntil(processTeamStats(msg.body, env));
     }
   },
 
