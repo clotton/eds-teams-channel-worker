@@ -60,9 +60,15 @@ async function getGraphToken(env) {
 
 async function fetchAndCacheAllTeamStats(env) {
 
-  const bearer = getGraphToken(env);
+  const bearer = await getGraphToken(env);
 
-  const teamIds = await getAllTeams({ bearer });
+  const data = {};
+
+  data.nameFilter = "aem-";
+  data.descriptionFilter = "Edge Delivery";
+  data.bearer = bearer;
+
+  const teamIds = await getAllTeams(data);
 
   const total = teamIds.length;
 
@@ -71,7 +77,6 @@ async function fetchAndCacheAllTeamStats(env) {
 
   const end = Math.min(cursor + BATCH_SIZE, total);
   const chunk = teamIds.slice(cursor, end);
-
 
   for (const teamId of chunk) {
     try {
