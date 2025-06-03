@@ -6,16 +6,10 @@ preview_urls = false
 main = "src/main.js"
 
 [triggers]
-crons = ["*/15 * * * *"]
+crons = ["0 * * * *"] # every hour
 
 [[kv_namespaces]]
 binding = "TEAMS_KV"
 id = "87ed889948c34679b4be4d3eccbb1350"
 
-[[queues.producers]]
-queue = "team-stats-queue"
-binding = "TEAM_STATS_QUEUE"
-
-[[queues.consumers]]
-queue = "team-stats-queue"
 

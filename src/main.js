@@ -7,7 +7,6 @@ import {
   getUserTeams,
   inviteUser,
   handleMessageStatsRequest,
-  getTeamMessageStats
 } from "./api";
 
 const options = async (request, env) => {
@@ -84,20 +83,6 @@ async function fetchAndCacheAllTeamStats(env) {
 export default {
   async scheduled(event, env, ctx) {
     ctx.waitUntil(fetchAndCacheAllTeamStats(env));
-  },
-
-  async queue(batch, env, ctx) {
-    for (const msg of batch.messages) {
-      const { teamId } = msg.body;
-      try {
-        const stats = await getTeamMessageStats(teamId, env.TEAMS_GRAPH_BEARER);
-        await env.TEAMS_KV.put(`stats:${teamId}`, JSON.stringify(stats), {
-          expirationTtl: 60 * 60 * 2,
-        });
-      } catch (err) {
-        console.error(`Error processing team ${teamId}:`, err);
-      }
-    }
   },
 
   async fetch(request, env) {
