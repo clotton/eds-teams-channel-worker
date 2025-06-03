@@ -58,47 +58,8 @@ async function getGraphToken(env) {
   return json.access_token;
 }
 
-async function fetchAndCacheAllTeamStats(env) {
-
-  const bearer = await getGraphToken(env);
-
-  const data = {};
-
-  data.nameFilter = "aem-";
-  data.descriptionFilter = "Edge Delivery";
-  data.bearer = bearer;
-
-  const teams = await getAllTeams(data);
-
-  const total = teams.length;
-
-  const cursorRaw = await env.TEAMS_KV.get(KV_KEY);
-  const cursor = cursorRaw ? parseInt(cursorRaw, 10) : 0;
-
-  const end = Math.min(cursor + BATCH_SIZE, total);
-  const chunk = teams.slice(cursor, end);
-
-  for (const team of chunk) {
-    try {
-      const stats = await getTeamMessageStats(team.id, bearer);
-      await env.TEAMS_KV.put(`stats:${team.id}`, JSON.stringify(stats), {
-        expirationTtl: 60 * 60 * 2,
-      });
-    } catch (err) {
-      console.error(`Error processing team ${teamId}:`, err);
-    }
-  }
-
-  // Advance cursor, wrap around to 0
-  const nextCursor = end >= total ? 0 : end;
-  await env.TEAMS_KV.put(KV_KEY, String(nextCursor));
-}
 
 export default {
-  async scheduled(event, env, ctx) {
-    ctx.waitUntil(fetchAndCacheAllTeamStats(env));
-  },
-
   async fetch(request, env) {
     try {
       const url = new URL(request.url);
