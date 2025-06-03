@@ -60,11 +60,33 @@ async function processTeamStats(teamId, env) {
   const bearer = await getGraphToken(env);
   const stats = await getTeamMessageStats(teamId, bearer);
 
-  // Throttle to ~10/sec
-  await new Promise(r => setTimeout(r, 1000));
+  const key = `${teamId}`;
+  const newValue = JSON.stringify(stats);
 
-  await env.TEAMS_KV.put(`${teamId}`, JSON.stringify(stats));
+  const existing = await env.TEAMS_KV.get(key);
+  if (existing !== newValue) {
+    await safePut(env.TEAMS_KV, key, newValue);
+    await new Promise(r => setTimeout(r, 1000));
+  }
 }
+
+async function safePut(kv, key, value, retries = 2) {
+  for (let i = 0; i <= retries; i++) {
+    try {
+      await kv.put(key, value);
+      return;
+    } catch (err) {
+      if (err instanceof Error && err.message.includes("429")) {
+        console.warn(`429 on KV.put(${key}), retrying...`);
+        await new Promise(r => setTimeout(r, 500));
+      } else {
+        throw err;
+      }
+    }
+  }
+  throw new Error(`KV.put failed after retries for key ${key}`);
+}
+
 
 async function generateJobs(env) {
   const bearer = await getGraphToken(env);
@@ -88,8 +110,6 @@ export default {
   async queue(batch, env, ctx) {
     for (const msg of batch.messages) {
       ctx.waitUntil(processTeamStats(msg.body.teamId, env));
-      // Throttle to ~10/sec
-      await new Promise(r => setTimeout(r, 1000));
     }
   },
 
