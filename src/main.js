@@ -9,8 +9,6 @@ import {
   handleMessageStatsRequest,
 } from "./api";
 
-const KV_KEY = 'team_stats_cron_cursor';
-const BATCH_SIZE = 30; // safely under 50 subrequests
 
 const options = async (request, env) => {
   if (request.method === 'OPTIONS') {
