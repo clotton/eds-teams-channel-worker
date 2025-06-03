@@ -83,7 +83,7 @@ export default {
 
   async queue(batch, env, ctx) {
     for (const msg of batch.messages) {
-      ctx.waitUntil(processTeamStats(msg.body, env));
+      ctx.waitUntil(processTeamStats(msg.body.teamId, env));
       // Throttle to ~10/sec
       await new Promise(r => setTimeout(r, 100));
     }

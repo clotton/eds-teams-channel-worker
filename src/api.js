@@ -195,12 +195,12 @@ async function getTeamMessageStats(teamId, bearer) {
   const cutoffDate = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
 
   const channelsRes = await fetch(`https://graph.microsoft.com/v1.0/teams/${teamId}/channels`, { headers });
-  if (!channelsRes.ok) return { messageCount: 0, latestMessage: null, recentCount: 0, partial: true };
+  if (!channelsRes.ok) return { messageCount: 0, latestMessage: null, recentCount: 0 };
 
   const channels = (await channelsRes.json()).value || [];
   const targetChannel = channels.find(c => c.displayName.toLowerCase() === 'main')
       || channels.find(c => c.displayName.toLowerCase() === 'general');
-  if (!targetChannel) return { messageCount: 0, latestMessage: null, recentCount: 0, partial: false };
+  if (!targetChannel) return { messageCount: 0, latestMessage: null, recentCount: 0 };
 
   let count = 0;
   let recentCount = 0;
@@ -273,8 +273,7 @@ async function getTeamMessageStats(teamId, bearer) {
   return {
     messageCount: count,
     latestMessage: latest ? latest.toISOString().split('T')[0] : null,
-    recentCount,
-    partial: false
+    recentCount
   };
 }
 
