@@ -6,7 +6,8 @@ import {
   getTeamMembers,
   getUserTeams,
   inviteUser,
-  handleMessageStatsRequest
+  handleMessageStatsRequest,
+  getTeamMessageStats
 } from "./api";
 
 const options = async (request, env) => {
@@ -71,37 +72,9 @@ async function fetchAndCacheAllTeamStats(env) {
       return;
     }
 
-    await Promise.all(teams.map(async (team) => {
-      const teamDetails = await getTeamById({ id: team.id, bearer });
-
-      if (!teamDetails) {
-        console.warn(`Error fetching team ${team.id} details`);
-        return null;
-      }
-
-      let teamSummary = {
-        teamId: team.id,
-        teamName: teamDetails.displayName || '',
-        description: teamDetails.description || '',
-        created: teamDetails.createdDateTime,
-        memberCount: teamDetails.summary.guestsCount + teamDetails.summary.membersCount,
-        webUrl: teamDetails.webUrl || '',
-      };
-
-      // Cache the summaries in KV or any other storage
-      await env.TEAMS_KV.put(team.id, JSON.stringify(teamSummary));
-
-      return {
-        teamId: team.id,
-        teamName: teamDetails.displayName || '',
-        description: teamDetails.description || '',
-        created: teamDetails.createdDateTime,
-        memberCount: teamDetails.summary.guestsCount + teamDetails.summary.membersCount,
-        webUrl: teamDetails.webUrl || '',
-      };
-    }));
-
-
+    for (const teamId of teamIds) {
+      await env.TEAM_STATS_QUEUE.send({ teamId });
+    }
   } catch (error) {
     console.error('Error fetching and caching all team stats:', error);
   }
@@ -112,6 +85,21 @@ export default {
   async scheduled(event, env, ctx) {
     ctx.waitUntil(fetchAndCacheAllTeamStats(env));
   },
+
+  async queue(batch, env, ctx) {
+    for (const msg of batch.messages) {
+      const { teamId } = msg.body;
+      try {
+        const stats = await getTeamMessageStats(teamId, env.TEAMS_GRAPH_BEARER);
+        await env.TEAMS_KV.put(`stats:${teamId}`, JSON.stringify(stats), {
+          expirationTtl: 60 * 60 * 2,
+        });
+      } catch (err) {
+        console.error(`Error processing team ${teamId}:`, err);
+      }
+    }
+  },
+
   async fetch(request, env) {
     try {
       const url = new URL(request.url);

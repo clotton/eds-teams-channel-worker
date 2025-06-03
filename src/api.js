@@ -478,5 +478,6 @@ export {
   getTeamById,
   getAllTeams,
   handleMessageStatsRequest,
+  getTeamMessageStats,
   inviteUser
 }
