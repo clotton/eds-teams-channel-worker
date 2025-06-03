@@ -5,7 +5,7 @@ workers_dev = true
 preview_urls = false
 main = "src/main.js"
 
-[triggers]
+#[triggers]
 #crons = ["*/15 * * * *"]
 
 [[kv_namespaces]]
