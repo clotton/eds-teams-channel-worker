@@ -188,7 +188,7 @@ async function getTeamMessageStats(teamId, bearer) {
   let url = `https://graph.microsoft.com/v1.0/teams/${teamId}/channels/${targetChannel.id}/messages`;
 
   while (url) {
-    const res = await fetch(url, { headers });
+    const res = await fetchWithRetry(url, { headers });
     if (!res.ok) break;
 
     const data = await res.json();
