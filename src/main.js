@@ -59,7 +59,7 @@ async function getGraphToken(env) {
 async function processTeamStats({ teamId }, env) {
   const bearer = await getGraphToken(env);
   const stats = await getTeamMessageStats(teamId, bearer);
-  await env.TEAM_STATS_KV.put(`stats:${teamId}`, JSON.stringify(stats));
+  await env.TEAM_KV.put(`stats:${teamId}`, JSON.stringify(stats));
 }
 
 async function generateJobs(env) {
