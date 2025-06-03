@@ -59,6 +59,10 @@ async function getGraphToken(env) {
 async function processTeamStats(teamId, env) {
   const bearer = await getGraphToken(env);
   const stats = await getTeamMessageStats(teamId, bearer);
+
+  // Throttle to ~10/sec
+  await new Promise(r => setTimeout(r, 1000));
+
   await env.TEAMS_KV.put(`${teamId}`, JSON.stringify(stats));
 }
 
