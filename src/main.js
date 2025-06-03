@@ -68,20 +68,20 @@ async function fetchAndCacheAllTeamStats(env) {
   data.descriptionFilter = "Edge Delivery";
   data.bearer = bearer;
 
-  const teamIds = await getAllTeams(data);
+  const teams = await getAllTeams(data);
 
-  const total = teamIds.length;
+  const total = teams.length;
 
   const cursorRaw = await env.TEAMS_KV.get(KV_KEY);
   const cursor = cursorRaw ? parseInt(cursorRaw, 10) : 0;
 
   const end = Math.min(cursor + BATCH_SIZE, total);
-  const chunk = teamIds.slice(cursor, end);
+  const chunk = teams.slice(cursor, end);
 
-  for (const teamId of chunk) {
+  for (const team of chunk) {
     try {
-      const stats = await getTeamMessageStats(teamId, bearer);
-      await env.TEAMS_KV.put(`stats:${teamId}`, JSON.stringify(stats), {
+      const stats = await getTeamMessageStats(team.id, bearer);
+      await env.TEAMS_KV.put(`stats:${team.id}`, JSON.stringify(stats), {
         expirationTtl: 60 * 60 * 2,
       });
     } catch (err) {
