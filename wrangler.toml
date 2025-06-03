@@ -5,11 +5,4 @@ workers_dev = true
 preview_urls = false
 main = "src/main.js"
 
-[triggers]
-crons = ["*/5 * * * *"]
-
-[[kv_namespaces]]
-binding = "TEAMS_KV"
-id = "87ed889948c34679b4be4d3eccbb1350"
-
 
