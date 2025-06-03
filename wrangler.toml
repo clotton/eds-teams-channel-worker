@@ -18,6 +18,5 @@ queue = "team-stats-queue"
 handler = "processTeamStats"
 
 [triggers]
-crons = ["*/5 * * * *"] # every 15 minutes
-
+crons = ["0 */2 * * *"] # every 2 hours
 
