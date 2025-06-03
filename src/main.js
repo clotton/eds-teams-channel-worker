@@ -62,7 +62,10 @@ async function fetchAndCacheAllTeamStats(env) {
       return;
     }
 
-    const teams = await getAllTeams({ bearer });
+    const nameFilter = "aem-";
+    const descriptionFilter = "Edge Delivery";
+
+    const teams = await getAllTeams({ bearer, nameFilter, descriptionFilter });
     if (!teams || teams.length === 0) {
       console.warn('No teams found');
       return;
