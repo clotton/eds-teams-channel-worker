@@ -185,19 +185,44 @@ async function getTeamMessageStats(teamId, bearer) {
   let count = 0;
   let recentCount = 0;
   let latest = null;
-  let url = `https://graph.microsoft.com/v1.0/teams/${teamId}/channels/${targetChannel.id}/messages`;
+  let url = `https://graph.microsoft.com/v1.0/teams/${teamId}/channels/${targetChannel.id}/messages?$filter=messageType eq 'message'`;
 
   while (url) {
-    const res = await fetchWithRetry(url, { headers });
+    const res = await fetch(url, { headers });
     if (!res.ok) break;
 
     const data = await res.json();
-    for (const msg of data.value || []) {
+    const messages = data.value || [];
+
+    for (const msg of messages) {
       if (msg.from?.user) {
         count++;
         const ts = new Date(msg.lastModifiedDateTime || msg.createdDateTime);
         if (!latest || ts > latest) latest = ts;
         if (ts >= cutoffDate) recentCount++;
+      }
+
+      // Fetch replies
+      const repliesUrl = `https://graph.microsoft.com/v1.0/teams/${teamId}/channels/${targetChannel.id}/messages/${msg.id}/replies?$filter=messageType eq 'message'`;
+      let replyUrl = repliesUrl;
+
+      while (replyUrl) {
+        const replyRes = await fetch(replyUrl, { headers });
+        if (!replyRes.ok) break;
+
+        const replyData = await replyRes.json();
+        const replies = replyData.value || [];
+
+        for (const reply of replies) {
+          if (reply.from?.user) {
+            count++;
+            const ts = new Date(reply.lastModifiedDateTime || reply.createdDateTime);
+            if (!latest || ts > latest) latest = ts;
+            if (ts >= cutoffDate) recentCount++;
+          }
+        }
+
+        replyUrl = replyData['@odata.nextLink'] || null;
       }
     }
 
@@ -208,9 +233,9 @@ async function getTeamMessageStats(teamId, bearer) {
     messageCount: count,
     latestMessage: latest ? latest.toISOString().split('T')[0] : null,
     recentCount,
+    partial: false
   };
 }
-
 
 async function inviteUser(data) {
   const url = `https://graph.microsoft.com/v1.0/invitations`;
