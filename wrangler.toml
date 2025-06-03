@@ -15,8 +15,7 @@ queue = "team-stats-queue"
 
 [[queues.consumers]]
 queue = "team-stats-queue"
-handler = "processTeamStats"
 
 [triggers]
-crons = ["0 */2 * * *"] # every 2 hours
+crons = ["*/5 * * * *"]
 
