@@ -185,7 +185,7 @@ async function getTeamMessageStats(teamId, bearer) {
   let count = 0;
   let recentCount = 0;
   let latest = null;
-  let url = `https://graph.microsoft.com/v1.0/teams/${teamId}/channels/${targetChannel.id}/messages'`;
+  let url = `https://graph.microsoft.com/v1.0/teams/${teamId}/channels/${targetChannel.id}/messages`;
 
   while (url) {
     const res = await fetchWithRetry(url, { headers });
