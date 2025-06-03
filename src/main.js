@@ -55,8 +55,32 @@ async function getGraphToken(env) {
   return json.access_token;
 }
 
+async function processTeamStats({ teamId }, env) {
+  const bearer = await getGraphToken(env);
+  const stats = await getTeamMessageStats(teamId, bearer);
+  await env.TEAM_STATS_KV.put(`stats:${teamId}`, JSON.stringify(stats));
+}
+
+async function generateJobs(env) {
+  const bearer = await getGraphToken(env);
+  const teams = await getAllTeams(env);
+  return teams.map(team => ({
+    body: JSON.stringify({ teamId: team.id })
+  }));
+}
 
 export default {
+  async scheduled(event, env, ctx) {
+    const messages = await generateJobs(env);
+    ctx.waitUntil(env.TEAM_STATS_QUEUE.sendBatch(messages));
+  },
+
+  async queue(batch, env, ctx) {
+    for (const msg of batch.messages) {
+      ctx.waitUntil(processTeamStats(msg.body, env));
+    }
+  },
+
   async fetch(request, env) {
     try {
       const url = new URL(request.url);

@@ -5,4 +5,15 @@ workers_dev = true
 preview_urls = false
 main = "src/main.js"
 
+[[queues.producers]]
+binding = "TEAM_STATS_QUEUE"
+queue = "team-stats-queue"
+
+[[queues.consumers]]
+queue = "team-stats-queue"
+handler = "processTeamStats"
+
+[triggers]
+crons = ["*/5 * * * *"] # every 15 minutes
+
 
