@@ -188,7 +188,7 @@ async function getTeamMessageStats(teamId, bearer) {
   let url = `https://graph.microsoft.com/v1.0/teams/${teamId}/channels/${targetChannel.id}/messages?$filter=messageType eq 'message'`;
 
   while (url) {
-    const res = await fetch(url, { headers });
+    const res = await fetchWithRetry(url, { headers });
     if (!res.ok) break;
 
     const data = await res.json();
@@ -207,7 +207,7 @@ async function getTeamMessageStats(teamId, bearer) {
       let replyUrl = repliesUrl;
 
       while (replyUrl) {
-        const replyRes = await fetch(replyUrl, { headers });
+        const replyRes = await fetchWithRetry(replyUrl, { headers });
         if (!replyRes.ok) break;
 
         const replyData = await replyRes.json();
