@@ -62,7 +62,7 @@ async function fetchAndCacheAllTeamStats(env) {
       return;
     }
 
-    const nameFilter = "aem-";
+    const nameFilter = "aem-c";
     const descriptionFilter = "Edge Delivery";
 
     const teams = await getAllTeams({ bearer, nameFilter, descriptionFilter });
