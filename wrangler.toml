@@ -17,5 +17,5 @@ queue = "team-stats-queue"
 queue = "team-stats-queue"
 
 [triggers]
-crons = ["*/5 * * * *"]
+crons = ["0 * * * *"] # every hour at minute 0
 

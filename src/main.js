@@ -66,8 +66,8 @@ async function processTeamStats(teamId, env) {
   //const existing = await env.TEAMS_KV.get(key);
   //if (existing !== newValue) {
     await safePut(env.TEAMS_KV, key, newValue);
-    await new Promise(r => setTimeout(r, 1000));
-  //}
+    await new Promise(r => setTimeout(r, 2000));
+ // }
 }
 
 async function safePut(kv, key, value, retries = 2) {
