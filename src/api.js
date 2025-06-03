@@ -170,9 +170,29 @@ async function handleMessageStatsRequest(data) {
 }
 
 
+function pLimit(concurrency) {
+  const queue = [];
+  let activeCount = 0;
+
+  const next = () => {
+    if (queue.length === 0 || activeCount >= concurrency) return;
+    activeCount++;
+    const { fn, resolve, reject } = queue.shift();
+    fn().then(resolve).catch(reject).finally(() => {
+      activeCount--;
+      next();
+    });
+  };
+
+  return (fn) => new Promise((resolve, reject) => {
+    queue.push({ fn, resolve, reject });
+    next();
+  });
+}
+
 async function getTeamMessageStats(teamId, bearer) {
   const headers = { Authorization: `Bearer ${bearer}` };
-  const cutoffDate = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000); // 30 days ago
+  const cutoffDate = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
 
   const channelsRes = await fetch(`https://graph.microsoft.com/v1.0/teams/${teamId}/channels`, { headers });
   if (!channelsRes.ok) return { messageCount: 0, latestMessage: null, recentCount: 0, partial: true };
@@ -185,70 +205,70 @@ async function getTeamMessageStats(teamId, bearer) {
   let count = 0;
   let recentCount = 0;
   let latest = null;
-  let url = `https://graph.microsoft.com/v1.0/teams/${teamId}/channels/${targetChannel.id}/messages`;
 
+  // Step 1: Fetch all message pages
+  const allMessages = [];
+  let url = `https://graph.microsoft.com/v1.0/teams/${teamId}/channels/${targetChannel.id}/messages`;
   while (url) {
     const res = await fetchWithRetry(url, { headers });
     if (!res.ok) {
-      const errorText = await res.text();
-      console.error(`Failed to fetch threads for ${teamId} (status ${res.status}): ${errorText}`);
+      console.error(`Error fetching messages page: ${res.status}`);
       break;
     }
-
     const data = await res.json();
-    const messages = data.value || [];
-
-    // Process top-level messages first
-    const replyFetchPromises = [];
-
-    for (const msg of messages) {
-      if (msg.from?.user) {
-        count++;
-        const ts = new Date(msg.lastModifiedDateTime || msg.createdDateTime);
-        if (!latest || ts > latest) latest = ts;
-        if (ts >= cutoffDate) recentCount++;
-      }
-
-      // Schedule reply fetch
-      const repliesUrl = `https://graph.microsoft.com/v1.0/teams/${teamId}/channels/${targetChannel.id}/messages/${msg.id}/replies`;
-
-      replyFetchPromises.push((async () => {
-        let replyUrl = repliesUrl;
-        while (replyUrl) {
-          try {
-            const replyRes = await fetchWithRetry(replyUrl, { headers });
-            if (!replyRes.ok) {
-              const errorText = await replyRes.text();
-              console.error(`Failed to fetch replies for message ${msg.id} (status ${replyRes.status}): ${errorText}`);
-              break;
-            }
-
-            const replyData = await replyRes.json();
-            const replies = replyData.value || [];
-
-            for (const reply of replies) {
-              if (reply.from?.user) {
-                count++;
-                const ts = new Date(reply.lastModifiedDateTime || reply.createdDateTime);
-                if (!latest || ts > latest) latest = ts;
-                if (ts >= cutoffDate) recentCount++;
-              }
-            }
-
-            replyUrl = replyData['@odata.nextLink'] || null;
-          } catch (err) {
-            console.error(`Error while fetching replies for message ${msg.id}:`, err);
-            break;
-          }
-        }
-      })());
-    }
-
-    // Wait for all reply fetches in parallel
-    await Promise.allSettled(replyFetchPromises);
-
+    allMessages.push(...(data.value || []));
     url = data['@odata.nextLink'] || null;
   }
+
+  // Step 2: Prepare throttled fetch for replies
+  const limit = pLimit(10); // 10 concurrent fetches
+  const replyTasks = [];
+
+  for (const msg of allMessages) {
+    if (msg.from?.user) {
+      count++;
+      const ts = new Date(msg.lastModifiedDateTime || msg.createdDateTime);
+      if (!latest || ts > latest) latest = ts;
+      if (ts >= cutoffDate) recentCount++;
+    }
+
+    // Fetch replies
+    const repliesUrl = `https://graph.microsoft.com/v1.0/teams/${teamId}/channels/${targetChannel.id}/messages/${msg.id}/replies`;
+
+    replyTasks.push(limit(async () => {
+      let replyUrl = repliesUrl;
+      while (replyUrl) {
+        try {
+          const replyRes = await fetchWithRetry(replyUrl, { headers });
+          if (!replyRes.ok) {
+            const errorText = await replyRes.text();
+            console.error(`Failed to fetch replies for ${msg.id}: ${replyRes.status} - ${errorText}`);
+            break;
+          }
+
+          const replyData = await replyRes.json();
+          const replies = replyData.value || [];
+
+          for (const reply of replies) {
+            if (reply.from?.user) {
+              count++;
+              const ts = new Date(reply.lastModifiedDateTime || reply.createdDateTime);
+              if (!latest || ts > latest) latest = ts;
+              if (ts >= cutoffDate) recentCount++;
+            }
+          }
+
+          replyUrl = replyData['@odata.nextLink'] || null;
+        } catch (err) {
+          console.error(`Error fetching replies for ${msg.id}:`, err);
+          break;
+        }
+      }
+    }));
+  }
+
+  // Step 3: Run all throttled reply fetches in parallel
+  await Promise.allSettled(replyTasks);
 
   return {
     messageCount: count,
