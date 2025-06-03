@@ -24,7 +24,7 @@ const options = async (request, env) => {
   });
 };
 
-const jsonToResponse = async (data, fct, env) => {
+const jsonToResponse = async (data, fct) => {
   try {
     const json = await fct(data);
     return new Response(JSON.stringify(json || 'Not found'), {
@@ -38,6 +38,22 @@ const jsonToResponse = async (data, fct, env) => {
     );
   }
 };
+
+const jsonToResponse = async (data, fct, env) => {
+  try {
+    const json = await fct(data, env);
+    return new Response(JSON.stringify(json || 'Not found'), {
+      status: json ? 200 : 404,
+      headers: CORS_HEADERS(env),
+    });
+  } catch (err) {
+    return new Response(
+        JSON.stringify({ error: err.message || 'Unknown error' }),
+        { status: 500, headers: CORS_HEADERS(env) }
+    );
+  }
+};
+
 // Get Microsoft Graph token
 async function getGraphToken(env) {
   const res = await fetch(env.AUTH_URL, {
@@ -184,22 +200,22 @@ export default {
         }
         case 'teams-members': {
           if (request.method === 'GET') {
-            return jsonToResponse(data, getTeamMembers, env);
+            return jsonToResponse(data, getTeamMembers);
           }
           if (request.method === 'POST') {
             data.env = env;
-            return jsonToResponse(data, addTeamMembers, env);
+            return jsonToResponse(data, addTeamMembers);
           }
           break;
         }
         case 'users-teams': {
           if (request.method === 'GET') {
-            return jsonToResponse(data, getUserTeams, env);
+            return jsonToResponse(data, getUserTeams);
           }
           break;
         }
         case 'users-invitation': {
-          return jsonToResponse(data, inviteUser, env);
+          return jsonToResponse(data, inviteUser);
         }
         default:
           return new Response(`Unknown action: ${action}`, {
