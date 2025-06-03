@@ -56,7 +56,7 @@ async function getGraphToken(env) {
   return json.access_token;
 }
 
-async function processTeamStats({ teamId }, env) {
+async function processTeamStats(teamId, env) {
   const bearer = await getGraphToken(env);
   const stats = await getTeamMessageStats(teamId, bearer);
   await env.TEAMS_KV.put(`${teamId}`, JSON.stringify(stats));
