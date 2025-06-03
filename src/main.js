@@ -59,7 +59,11 @@ async function getGraphToken(env) {
 }
 
 async function fetchAndCacheAllTeamStats(env) {
-  const teamIds = await getTeamIdList();
+
+  const bearer = getGraphToken(env);
+
+  const teamIds = await getAllTeams({ bearer });
+
   const total = teamIds.length;
 
   const cursorRaw = await env.TEAMS_KV.get(KV_KEY);
@@ -67,7 +71,7 @@ async function fetchAndCacheAllTeamStats(env) {
 
   const end = Math.min(cursor + BATCH_SIZE, total);
   const chunk = teamIds.slice(cursor, end);
-  const bearer = env.TEAMS_GRAPH_BEARER;
+
 
   for (const teamId of chunk) {
     try {
