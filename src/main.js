@@ -9,6 +9,9 @@ import {
   handleMessageStatsRequest,
 } from "./api";
 
+const KV_KEY = 'team_stats_cron_cursor';
+const BATCH_SIZE = 30; // safely under 50 subrequests
+
 const options = async (request, env) => {
   if (request.method === 'OPTIONS') {
     return new Response(null, {
@@ -55,30 +58,31 @@ async function getGraphToken(env) {
 }
 
 async function fetchAndCacheAllTeamStats(env) {
-  try {
-    const bearer = await getGraphToken(env);
-    if (!bearer) {
-      console.error('Failed to get Graph token');
-      return;
-    }
+  const teamIds = await getTeamIdList();
+  const total = teamIds.length;
 
-    const nameFilter = "aem-c";
-    const descriptionFilter = "Edge Delivery";
+  const cursorRaw = await env.TEAMS_KV.get(KV_KEY);
+  const cursor = cursorRaw ? parseInt(cursorRaw, 10) : 0;
 
-    const teams = await getAllTeams({ bearer, nameFilter, descriptionFilter });
-    if (!teams || teams.length === 0) {
-      console.warn('No teams found');
-      return;
-    }
+  const end = Math.min(cursor + BATCH_SIZE, total);
+  const chunk = teamIds.slice(cursor, end);
+  const bearer = env.TEAMS_GRAPH_BEARER;
 
-    for (const teamId of teamIds) {
-      await env.TEAM_STATS_QUEUE.send({ teamId });
+  for (const teamId of chunk) {
+    try {
+      const stats = await getTeamMessageStats(teamId, bearer);
+      await env.TEAMS_KV.put(`stats:${teamId}`, JSON.stringify(stats), {
+        expirationTtl: 60 * 60 * 2,
+      });
+    } catch (err) {
+      console.error(`Error processing team ${teamId}:`, err);
     }
-  } catch (error) {
-    console.error('Error fetching and caching all team stats:', error);
   }
-}
 
+  // Advance cursor, wrap around to 0
+  const nextCursor = end >= total ? 0 : end;
+  await env.TEAMS_KV.put(KV_KEY, String(nextCursor));
+}
 
 export default {
   async scheduled(event, env, ctx) {
