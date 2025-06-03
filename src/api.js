@@ -192,11 +192,14 @@ async function getTeamMessageStats(teamId, bearer) {
     if (!res.ok) {
       const errorText = await res.text();
       console.error(`Failed to fetch threads for ${teamId} (status ${res.status}): ${errorText}`);
-      break; // or consider `continue` or `throw` based on strictness
+      break;
     }
 
     const data = await res.json();
     const messages = data.value || [];
+
+    // Process top-level messages first
+    const replyFetchPromises = [];
 
     for (const msg of messages) {
       if (msg.from?.user) {
@@ -206,33 +209,43 @@ async function getTeamMessageStats(teamId, bearer) {
         if (ts >= cutoffDate) recentCount++;
       }
 
-      // Fetch replies
+      // Schedule reply fetch
       const repliesUrl = `https://graph.microsoft.com/v1.0/teams/${teamId}/channels/${targetChannel.id}/messages/${msg.id}/replies`;
-      let replyUrl = repliesUrl;
 
-      while (replyUrl) {
-        const replyRes = await fetchWithRetry(replyUrl, { headers });
-        if (!replyRes.ok) {
-          const errorText = await replyRes.text();
-          console.error(`Failed to fetch replies for message ${msg.id} (status ${replyRes.status}): ${errorText}`);
-          break; // or consider `continue` or `throw` based on strictness
-        }
+      replyFetchPromises.push((async () => {
+        let replyUrl = repliesUrl;
+        while (replyUrl) {
+          try {
+            const replyRes = await fetchWithRetry(replyUrl, { headers });
+            if (!replyRes.ok) {
+              const errorText = await replyRes.text();
+              console.error(`Failed to fetch replies for message ${msg.id} (status ${replyRes.status}): ${errorText}`);
+              break;
+            }
 
-        const replyData = await replyRes.json();
-        const replies = replyData.value || [];
+            const replyData = await replyRes.json();
+            const replies = replyData.value || [];
 
-        for (const reply of replies) {
-          if (reply.from?.user) {
-            count++;
-            const ts = new Date(reply.lastModifiedDateTime || reply.createdDateTime);
-            if (!latest || ts > latest) latest = ts;
-            if (ts >= cutoffDate) recentCount++;
+            for (const reply of replies) {
+              if (reply.from?.user) {
+                count++;
+                const ts = new Date(reply.lastModifiedDateTime || reply.createdDateTime);
+                if (!latest || ts > latest) latest = ts;
+                if (ts >= cutoffDate) recentCount++;
+              }
+            }
+
+            replyUrl = replyData['@odata.nextLink'] || null;
+          } catch (err) {
+            console.error(`Error while fetching replies for message ${msg.id}:`, err);
+            break;
           }
         }
-
-        replyUrl = replyData['@odata.nextLink'] || null;
-      }
+      })());
     }
+
+    // Wait for all reply fetches in parallel
+    await Promise.allSettled(replyFetchPromises);
 
     url = data['@odata.nextLink'] || null;
   }
