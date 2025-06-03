@@ -207,7 +207,7 @@ async function getTeamMessageStats(teamId, bearer) {
       }
 
       // Fetch replies
-      const repliesUrl = `https://graph.microsoft.com/v1.0/teams/${teamId}/channels/${targetChannel.id}/messages/${msg.id}/replies?$filter=messageType eq 'message'`;
+      const repliesUrl = `https://graph.microsoft.com/v1.0/teams/${teamId}/channels/${targetChannel.id}/messages/${msg.id}/replies`;
       let replyUrl = repliesUrl;
 
       while (replyUrl) {
