@@ -63,7 +63,12 @@ async function processTeamStats({ teamId }, env) {
 
 async function generateJobs(env) {
   const bearer = await getGraphToken(env);
-  const teams = await getAllTeams(env);
+  const data = { };
+  data.bearer = bearer;
+  data.nameFilter = 'aem-';
+  data.descriptionFilter = 'Edge Delivery';
+
+  const teams = await getAllTeams(data);
   return teams.map(team => ({
     body: JSON.stringify({ teamId: team.id })
   }));
