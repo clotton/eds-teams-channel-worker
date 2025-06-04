@@ -406,7 +406,7 @@ async function fetchWithRetry(url, options, retries = 5) {
   for (let i = 0; i < retries; i++) {
     const res = await fetch(url, options);
 
-    if (res.status !== 429) return res;
+    if (res.ok) return res;
 
     const retryAfter = res.headers.get("Retry-After");
     const waitTime = retryAfter ? parseInt(retryAfter, 10) * 1000 : 5000; // default 5s
