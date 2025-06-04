@@ -150,6 +150,24 @@ export default {
         data.body = await request.json();
       }
 
+      // New debug endpoint for quick message stats check
+      if (paths[0] === 'teams-message-debug' && paths.length === 2) {
+        const teamId = paths[1];
+        try {
+          const bearer = await getGraphToken(env);
+          const stats = await getTeamMessageStats(teamId, bearer);
+          return new Response(JSON.stringify(stats), {
+            status: 200,
+            headers: CORS_HEADERS(env),
+          });
+        } catch (err) {
+          return new Response(JSON.stringify({ error: err.message || 'Unknown error' }), {
+            status: 500,
+            headers: CORS_HEADERS(env),
+          });
+        }
+      }
+
       if (paths && paths.length > 0) {
         if (paths[0] === 'teams' || paths[0] === 'users') {
           const prefix = paths[0];
