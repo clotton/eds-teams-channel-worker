@@ -387,28 +387,53 @@ async function addTeamMembers(data) {
   return results;
 }
 
-async function fetchWithRetry(url, options, retries = 4, delay = 5000) {
+async function fetchWithRetry(url, options = {}, retries = 4, delay = 5000, timeout = 10000) {
   for (let i = 0; i < retries; i++) {
-    const res = await fetch(url, options);
-    if (res.ok) return res;
+    const controller = new AbortController();
+    const id = setTimeout(() => controller.abort(), timeout);
+    options.signal = controller.signal;
 
-    const body = await res.text();
-    const retryAfter = res.headers.get("Retry-After");
+    try {
+      const res = await fetch(url, options);
+      clearTimeout(id);
 
-    console.warn(`Retry ${i + 1}/${retries}: ${res.status} - ${body}`);
+      if (res.ok) return res;
 
-    if (res.status === 503 || res.status === 502 || res.status === 504 || res.status === 429) {
-      const wait = retryAfter ? parseInt(retryAfter) * 1000 : delay;
-      await new Promise(r => setTimeout(r, wait));
-      delay *= 2;
-      continue;
+      const body = await res.text();
+      const retryAfter = res.headers.get("Retry-After");
+
+      console.warn(`Retry ${i + 1}/${retries}: ${res.status} - ${body}`);
+
+      if ([502, 503, 504, 429].includes(res.status)) {
+        const baseDelay = retryAfter ? parseInt(retryAfter) * 1000 : delay;
+        const jitter = Math.floor(Math.random() * 1000); // up to 1s of jitter
+        await new Promise(r => setTimeout(r, baseDelay + jitter));
+        delay *= 2;
+        continue;
+      }
+
+      throw new Error(`Non-retryable HTTP error: ${res.status} - ${body}`);
+    } catch (err) {
+      clearTimeout(id);
+
+      if (err.name === "AbortError") {
+        console.warn(`Timeout on attempt ${i + 1} (${timeout}ms)`);
+      } else {
+        console.warn(`Fetch error on attempt ${i + 1}:`, err.message);
+      }
+
+      if (i < retries - 1) {
+        const jitter = Math.floor(Math.random() * 1000);
+        await new Promise(r => setTimeout(r, delay + jitter));
+        delay *= 2;
+        continue;
+      }
+
+      throw new Error(`Failed after ${retries} retries: ${err.message}`);
     }
-
-    throw new Error(`Non-retryable error: ${res.status} - ${body}`);
   }
-
-  throw new Error(`Failed after ${retries} retries: ${url}`);
 }
+
 
 
 export {
