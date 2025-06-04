@@ -194,6 +194,9 @@ async function getTeamMessageStats(teamId, bearer) {
     const data = await res.json();
     allMessages.push(...(data.value || []));
     url = data['@odata.nextLink'] || null;
+
+    await new Promise(r => setTimeout(r, 200));
+
   }
 
   // Process top-level messages
@@ -250,6 +253,7 @@ async function fetchRepliesAndCount(messageId, headers, teamId, channelId, cutof
         if (ts >= cutoffDate) recentReplyCount++;
       }
     }
+    await new Promise(r => setTimeout(r, 200));
 
     url = data['@odata.nextLink'] || null;
   }
