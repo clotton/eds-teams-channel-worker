@@ -91,9 +91,12 @@ export default {
   },
 
   async queue(batch, env, ctx) {
-    for (const msg of batch.messages) {
-      const teamId = msg.body.teamId;
-      ctx.waitUntil(processTeamStats(teamId, env));
+    const chunkSize = 1;
+    for (let i = 0; i < batch.messages.length; i += chunkSize) {
+      const chunk = batch.messages.slice(i, i + chunkSize);
+      ctx.waitUntil(Promise.all(chunk.map(msg =>
+          processTeamStats(msg.body.teamId, env)
+      )));
     }
   },
 
