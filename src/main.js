@@ -61,24 +61,40 @@ async function handleCronJob(env) {
   const bearer = await getGraphToken(env);
 
   const data = { bearer, env, nameFilter: 'aem-', descriptionFilter: 'Edge Delivery' };
-  const teams = await getAllTeams(data); // Your function to list teams
+  const teams = await getAllTeams(data);
 
   for (const team of teams) {
-    try {
-      const stats = await getTeamMessageStats(team.id, bearer);
-      if (stats) {
-        const key = team.id;
-        await env.TEAMS_KV.put(key, JSON.stringify(stats));
-      }
-    } catch (err) {
-      console.error(`Error processing ${team.id}:`, err);
-    }
+    await env.TEAM_STATS_QUEUE.send({
+      teamId: team.id
+    });
   }
 }
+
+async function processTeamStats(teamId, env) {
+  const bearer = await getGraphToken(env);
+  const stats = await getTeamMessageStats(teamId, bearer);
+  if (!stats) return;
+
+  const key = teamId;
+  const newValue = JSON.stringify(stats);
+  const existing = await env.TEAMS_KV.get(key);
+
+  if (existing !== newValue) {
+    await env.TEAMS_KV.put(key, newValue);
+  }
+}
+
 
 export default {
   async scheduled(event, env, ctx) {
     ctx.waitUntil(handleCronJob(env));
+  },
+
+  async queue(batch, env, ctx) {
+    for (const msg of batch.messages) {
+      const { teamId } = JSON.parse(msg.body);
+      ctx.waitUntil(processTeamStats(teamId, env));
+    }
   },
 
   async fetch(request, env) {

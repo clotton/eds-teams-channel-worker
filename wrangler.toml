@@ -13,3 +13,7 @@ id = "862abef7a5eb46c996ce6c4261c640c0"
 [triggers]
 crons = ["*/15 * * * *"]
 
+[[queues.producers]]
+queue = "team-stats-queue"
+binding = "TEAM_STATS_QUEUE"
+
