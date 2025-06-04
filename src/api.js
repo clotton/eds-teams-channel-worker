@@ -152,6 +152,7 @@ const getAllTeams = async (data) => {
 
 async function handleMessageStatsRequest(data, env) {
   const teamId = data.body.teamId;
+  const bearer = data.bearer;
 
   if (!teamId) {
     return new Response('Missing teamId', { status: 400 });
