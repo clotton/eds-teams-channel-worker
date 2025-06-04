@@ -158,7 +158,7 @@ async function handleMessageStatsRequest(data, env) {
   }
 
   try {
-    return await getTeamMessageStats(teamId, data.bearer);
+    return await getTeamMessageStats(teamId, bearer);
   } catch (err) {
     console.error(`Error fetching stats for team ${teamId}:`, err);
     return new Response(JSON.stringify({ error: true }), {
