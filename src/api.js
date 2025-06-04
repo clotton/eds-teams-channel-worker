@@ -169,6 +169,29 @@ async function handleMessageStatsRequest(data, env) {
   }
 }
 
+const MAX_CONCURRENCY = 10;
+
+async function runWithLimit(tasks, limit = MAX_CONCURRENCY) {
+  const results = [];
+  let i = 0;
+
+  async function worker() {
+    while (i < tasks.length) {
+      const idx = i++;
+      try {
+        results[idx] = await tasks[idx]();
+      } catch (err) {
+        results[idx] = { error: err.message };
+      }
+    }
+  }
+
+  const runners = Array(limit).fill(0).map(worker);
+  await Promise.all(runners);
+  return results;
+}
+
+
 async function getTeamMessageStats(teamId, bearer) {
   const headers = { Authorization: `Bearer ${bearer}` };
   const cutoffDate = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000); // 30 days ago
@@ -194,9 +217,6 @@ async function getTeamMessageStats(teamId, bearer) {
     const data = await res.json();
     allMessages.push(...(data.value || []));
     url = data['@odata.nextLink'] || null;
-
-    await new Promise(r => setTimeout(r, 200));
-
   }
 
   // Process top-level messages
@@ -214,7 +234,7 @@ async function getTeamMessageStats(teamId, bearer) {
     replyFetches.push(fetchRepliesAndCount(msg.id, headers, teamId, targetChannel.id, cutoffDate));
   }
 
-  const replyResults = await Promise.allSettled(replyFetches);
+  const replyResults = await runWithLimit(replyFetches, 10);
 
   for (const result of replyResults) {
     if (result.status === "fulfilled" && result.value) {
@@ -253,8 +273,6 @@ async function fetchRepliesAndCount(messageId, headers, teamId, channelId, cutof
         if (ts >= cutoffDate) recentReplyCount++;
       }
     }
-    await new Promise(r => setTimeout(r, 200));
-
     url = data['@odata.nextLink'] || null;
   }
 
