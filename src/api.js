@@ -383,7 +383,7 @@ async function addTeamMembers(data) {
   return results;
 }
 
-async function fetchWithRetry(url, options, retries = 4, delay = 1000) {
+async function fetchWithRetry(url, options, retries = 4, delay = 5000) {
   for (let i = 0; i < retries; i++) {
     const res = await fetch(url, options);
     if (res.ok) return res;
@@ -393,7 +393,7 @@ async function fetchWithRetry(url, options, retries = 4, delay = 1000) {
 
     console.warn(`Retry ${i + 1}/${retries}: ${res.status} - ${body}`);
 
-    if (res.status === 503 || res.status === 429) {
+    if (res.status === 503 || res.status === 502 || res.status === 504 || res.status === 429) {
       const wait = retryAfter ? parseInt(retryAfter) * 1000 : delay;
       await new Promise(r => setTimeout(r, wait));
       delay *= 2;
