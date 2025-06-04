@@ -9,6 +9,7 @@ import {
   handleMessageStatsRequest
 } from "./api";
 
+
 const options = async (request, env) => {
   if (request.method === 'OPTIONS') {
     return new Response(null, {
@@ -36,6 +37,7 @@ const jsonToResponse = async (data, fct, env) => {
     );
   }
 };
+
 // Get Microsoft Graph token
 async function getGraphToken(env) {
   const res = await fetch(env.AUTH_URL, {
@@ -91,7 +93,7 @@ export default {
         case 'teams': {
             data.nameFilter = searchParams.get("nameFilter") || '';
             data.descriptionFilter = searchParams.get("descriptionFilter") || '';
-            return jsonToResponse(data, getAllTeams, env);
+            return jsonToResponse(data, getAllTeams);
         }
         case 'teams-summary': {
           const teamIds = data.body.teamIds || [];
@@ -126,22 +128,22 @@ export default {
         }
         case 'teams-members': {
           if (request.method === 'GET') {
-            return jsonToResponse(data, getTeamMembers, env);
+            return jsonToResponse(data, getTeamMembers);
           }
           if (request.method === 'POST') {
             data.env = env;
-            return jsonToResponse(data, addTeamMembers, env);
+            return jsonToResponse(data, addTeamMembers);
           }
           break;
         }
         case 'users-teams': {
           if (request.method === 'GET') {
-            return jsonToResponse(data, getUserTeams, env);
+            return jsonToResponse(data, getUserTeams);
           }
           break;
         }
         case 'users-invitation': {
-          return jsonToResponse(data, inviteUser, env);
+          return jsonToResponse(data, inviteUser);
         }
         default:
           return new Response(`Unknown action: ${action}`, {
