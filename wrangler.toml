@@ -15,6 +15,7 @@ queue = "team-stats-queue"
 
 [[queues.consumers]]
 queue = "team-stats-queue"
+batch_size = 3  # was 10
 
 [triggers]
 crons = ["*/15 * * * *"]
