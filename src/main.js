@@ -60,7 +60,7 @@ async function getGraphToken(env) {
 async function handleCronJob(env) {
   const bearer = await getGraphToken(env);
 
-  const data = { bearer, env, nameFilter: 'aem-', descriptionFilter: 'Edge Delivery' };
+  const data = { bearer, env, nameFilter: '', descriptionFilter: '' };
   const teams = await getAllTeams(data);
 
   for (const team of teams) {
