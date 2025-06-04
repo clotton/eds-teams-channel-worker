@@ -17,3 +17,7 @@ crons = ["*/15 * * * *"]
 queue = "team-stats-queue"
 binding = "TEAM_STATS_QUEUE"
 
+[[queues.consumers]]
+queue = "team-stats-queue"
+binding = "TEAM_STATS_QUEUE"
+
