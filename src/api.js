@@ -269,7 +269,7 @@ async function fetchRepliesAndCount(messageId, headers, teamId, channelId, cutof
       }
     }
     url = data['@odata.nextLink'] || null;
-    await new Promise(r => setTimeout(r, 1000));
+    await new Promise(r => setTimeout(r, 500));
 
   }
 
