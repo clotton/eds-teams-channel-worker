@@ -158,7 +158,7 @@ async function handleMessageStatsRequest(data, env) {
   }
 
   try {
-    const raw = env.TEAMS_KV.get(teamId);
+    const raw = await env.TEAMS_KV.get(teamId);
     const messageStats = raw ? JSON.parse(raw) : null;
     console.log(`Fetched stats from KV for team ${teamId}:`, messageStats);
   } catch (err) {
