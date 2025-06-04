@@ -169,41 +169,17 @@ async function handleMessageStatsRequest(data, env) {
   }
 }
 
-async function processInChunksWithRetry(promises, {
-  chunkSize = 5,
-  maxChunkRetries = 3,
-  delayBetweenChunks = 2000
-} = {}) {
+async function processInChunks(promises, chunkSize = 5) {
   const results = [];
 
   for (let i = 0; i < promises.length; i += chunkSize) {
     const chunk = promises.slice(i, i + chunkSize);
-
-    let attempts = 0;
-    let settled;
-
-    while (attempts <= maxChunkRetries) {
-      settled = await Promise.allSettled(chunk);
-
-      const allSuccessful = settled.every(r => r.status === 'fulfilled');
-      results.push(...settled);
-
-      if (allSuccessful) break;
-
-      attempts++;
-      if (attempts <= maxChunkRetries) {
-        console.warn(`Retrying chunk ${i / chunkSize + 1}, attempt ${attempts}`);
-        await new Promise(r => setTimeout(r, delayBetweenChunks));
-      }
-    }
-
-    // optional: backoff before next chunk
-    await new Promise(r => setTimeout(r, delayBetweenChunks));
+    const settled = await Promise.allSettled(chunk);
+    results.push(...settled);
   }
 
   return results;
 }
-
 
 async function getTeamMessageStats(teamId, bearer) {
   const headers = { Authorization: `Bearer ${bearer}` };
@@ -247,7 +223,7 @@ async function getTeamMessageStats(teamId, bearer) {
     replyFetches.push(fetchRepliesAndCount(msg.id, headers, teamId, targetChannel.id, cutoffDate));
   }
 
-  const replyResults = await processInChunksWithRetry(replyFetches, 5);
+  const replyResults = await processInChunks(replyFetches, 5);
 
   for (const result of replyResults) {
     if (result.status === 'rejected') {
