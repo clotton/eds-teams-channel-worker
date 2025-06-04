@@ -76,14 +76,19 @@ async function processTeamStats(teamId, env) {
   const bearer = await getGraphToken(env);
   const stats = await getTeamMessageStats(teamId, bearer);
 
+  if (!stats) {
+    console.warn(`No stats found for team ${teamId} or a problem occured`);
+    return;
+  }
+
   const key = teamId;
   const newValue = JSON.stringify(stats);
 
-  //const existing = await env.TEAMS_KV.get(key);
-  //if (existing !== newValue) {
+  const existing = await env.TEAMS_KV.get(key);
+  if (existing !== newValue) {
     await safePut(env.TEAMS_KV, key, newValue);
     await new Promise(r => setTimeout(r, 1000));
- // }
+  }
 }
 
 async function safePut(kv, key, value, retries = 2) {
@@ -119,6 +124,7 @@ async function generateJobs(env) {
 
 export default {
   async scheduled(event, env, ctx) {
+    console.log("Running scheduled task at", event.scheduledTime);
     const messages = await generateJobs(env);
     ctx.waitUntil(env.TEAM_STATS_QUEUE.sendBatch(messages));
   },

@@ -19,6 +19,4 @@ queue = "team-stats-queue"
 [triggers]
 crons = ["*/15 * * * *"]
 
-[logs]
-level = "info"
 

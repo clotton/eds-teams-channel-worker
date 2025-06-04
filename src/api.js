@@ -212,7 +212,7 @@ async function getTeamMessageStats(teamId, bearer) {
     const res = await fetchWithRetry(url, { headers });
     if (!res.ok) {
       console.error(`Error fetching messages page: ${res.status}`);
-      break;
+      return null;
     }
     const data = await res.json();
     allMessages.push(...(data.value || []));
@@ -242,7 +242,7 @@ async function getTeamMessageStats(teamId, bearer) {
           if (!replyRes.ok) {
             const errorText = await replyRes.text();
             console.error(`Failed to fetch replies for ${msg.id}: ${replyRes.status} - ${errorText}`);
-            break;
+            return null;
           }
 
           const replyData = await replyRes.json();
