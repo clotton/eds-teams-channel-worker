@@ -152,14 +152,13 @@ const getAllTeams = async (data) => {
 
 async function handleMessageStatsRequest(data, env) {
   const teamId = data.body.teamId;
-  const bearer = data.bearer;
 
   if (!teamId) {
     return new Response('Missing teamId', { status: 400 });
   }
 
   try {
-    return await getTeamMessageStats(teamId, bearer);
+    return await env.TEAMS_KV.get(teamId);
   } catch (err) {
     console.error(`Error fetching stats for team ${teamId}:`, err);
     return new Response(JSON.stringify({ error: true }), {
