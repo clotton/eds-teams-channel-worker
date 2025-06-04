@@ -169,28 +169,22 @@ async function handleMessageStatsRequest(data, env) {
   }
 }
 
-const MAX_CONCURRENCY = 10;
-
-async function runWithLimit(tasks, limit = MAX_CONCURRENCY) {
+async function processInChunks(tasks, chunkSize = 10) {
   const results = [];
-  let i = 0;
 
-  async function worker() {
-    while (i < tasks.length) {
-      const idx = i++;
-      try {
-        results[idx] = await tasks[idx]();
-      } catch (err) {
-        results[idx] = { error: err.message };
-      }
-    }
+  for (let i = 0; i < tasks.length; i += chunkSize) {
+    const chunk = tasks.slice(i, i + chunkSize);
+
+    const settled = await Promise.allSettled(chunk.map(fn => fn()));
+
+    results.push(...settled);
+
+    // Optional: delay between chunks
+    await new Promise(r => setTimeout(r, 1000));
   }
 
-  const runners = Array(limit).fill(0).map(worker);
-  await Promise.all(runners);
   return results;
 }
-
 
 async function getTeamMessageStats(teamId, bearer) {
   const headers = { Authorization: `Bearer ${bearer}` };
@@ -234,7 +228,13 @@ async function getTeamMessageStats(teamId, bearer) {
     replyFetches.push(fetchRepliesAndCount(msg.id, headers, teamId, targetChannel.id, cutoffDate));
   }
 
-  const replyResults = await runWithLimit(replyFetches, 10);
+  const replyResults = await processInChunks(replyFetches, 5);
+
+  for (const result of replyResults) {
+    if (result.status === 'rejected') {
+      console.error('Reply fetch failed:', result.reason);
+    }
+  }
 
   for (const result of replyResults) {
     if (result.status === "fulfilled" && result.value) {
