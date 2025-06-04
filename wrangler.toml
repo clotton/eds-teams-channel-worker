@@ -4,7 +4,11 @@ compatibility_date = "2025-04-16"
 workers_dev = true
 preview_urls = false
 main = "src/main.js"
-[env.dev]
+
+[[kv_namespaces]]
+binding = "TEAMS_KV"
+id = "87ed889948c34679b4be4d3eccbb1350"
+
 
 
 
