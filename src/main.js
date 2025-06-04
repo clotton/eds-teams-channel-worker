@@ -6,8 +6,7 @@ import {
   getTeamMembers,
   getUserTeams,
   inviteUser,
-  handleMessageStatsRequest,
-  getTeamMessageStats
+  handleMessageStatsRequest
 } from "./api";
 
 
@@ -39,21 +38,6 @@ const jsonToResponse = async (data, fct, env) => {
   }
 };
 
-const jsonToResponseEnv = async (data, fct, env) => {
-  try {
-    const json = await fct(data, env);
-    return new Response(JSON.stringify(json || 'Not found'), {
-      status: json ? 200 : 404,
-      headers: CORS_HEADERS(env),
-    });
-  } catch (err) {
-    return new Response(
-        JSON.stringify({ error: err.message || 'Unknown error' }),
-        { status: 500, headers: CORS_HEADERS(env) }
-    );
-  }
-};
-
 // Get Microsoft Graph token
 async function getGraphToken(env) {
   const res = await fetch(env.AUTH_URL, {
@@ -72,69 +56,7 @@ async function getGraphToken(env) {
   return json.access_token;
 }
 
-async function processTeamStats(teamId, env) {
-  const bearer = await getGraphToken(env);
-  const stats = await getTeamMessageStats(teamId, bearer);
-
-  if (!stats) {
-    console.warn(`No stats found for team ${teamId} or a problem occured`);
-    return;
-  }
-
-  const key = teamId;
-  const newValue = JSON.stringify(stats);
-
-  const existing = await env.TEAMS_KV.get(key);
-  if (existing !== newValue) {
-    await safePut(env.TEAMS_KV, key, newValue);
-    await new Promise(r => setTimeout(r, 1000));
-  }
-}
-
-async function safePut(kv, key, value, retries = 2) {
-  for (let i = 0; i <= retries; i++) {
-    try {
-      await kv.put(key, value);
-      return;
-    } catch (err) {
-      if (err instanceof Error && err.message.includes("429")) {
-        console.warn(`429 on KV.put(${key}), retrying...`);
-        await new Promise(r => setTimeout(r, 500));
-      } else {
-        throw err;
-      }
-    }
-  }
-  throw new Error(`KV.put failed after retries for key ${key}`);
-}
-
-
-async function generateJobs(env) {
-  const bearer = await getGraphToken(env);
-  const data = { };
-  data.bearer = bearer;
-  data.nameFilter = 'aem-';
-  data.descriptionFilter = 'Edge Delivery';
-
-  const teams = await getAllTeams(data);
-  return teams.map(team => ({
-    body: team.id
-  }));
-}
-
 export default {
-  async scheduled(event, env, ctx) {
-    console.log("Running scheduled task at", event.scheduledTime);
-    const messages = await generateJobs(env);
-    ctx.waitUntil(env.TEAM_STATS_QUEUE.sendBatch(messages));
-  },
-
-  async queue(batch, env, ctx) {
-    for (const msg of batch.messages) {
-      ctx.waitUntil(processTeamStats(msg.body, env));
-    }
-  },
-
   async fetch(request, env) {
     try {
       const url = new URL(request.url);
@@ -148,24 +70,6 @@ export default {
       }
       if (request.method === 'POST') {
         data.body = await request.json();
-      }
-
-      // New debug endpoint for quick message stats check
-      if (paths[0] === 'teams-message-debug' && paths.length === 2) {
-        const teamId = paths[1];
-        try {
-          const bearer = await getGraphToken(env);
-          const stats = await getTeamMessageStats(teamId, bearer);
-          return new Response(JSON.stringify(stats), {
-            status: 200,
-            headers: CORS_HEADERS(env),
-          });
-        } catch (err) {
-          return new Response(JSON.stringify({ error: err.message || 'Unknown error' }), {
-            status: 500,
-            headers: CORS_HEADERS(env),
-          });
-        }
       }
 
       if (paths && paths.length > 0) {
@@ -218,7 +122,7 @@ export default {
         }
         case 'teams-messages': {
           if (request.method === 'POST') {
-            return jsonToResponseEnv(data, handleMessageStatsRequest, env);
+            return jsonToResponse(data, handleMessageStatsRequest, env);
           }
           break;
         }

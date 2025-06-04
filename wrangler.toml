@@ -5,19 +5,5 @@ workers_dev = true
 preview_urls = false
 main = "src/main.js"
 
-[[kv_namespaces]]
-binding = "TEAMS_KV"
-id = "87ed889948c34679b4be4d3eccbb1350"
-
-[[queues.producers]]
-binding = "TEAM_STATS_QUEUE"
-queue = "team-stats-queue"
-
-[[queues.consumers]]
-queue = "team-stats-queue"
-batch_size = 3  # was 10
-
-[triggers]
-crons = ["*/15 * * * *"]
 
 

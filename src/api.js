@@ -158,7 +158,7 @@ async function handleMessageStatsRequest(data, env) {
   }
 
   try {
-    return await env.TEAMS_KV.get(teamId);
+    return await getTeamMessageStats(teamId, data.bearer);
   } catch (err) {
     console.error(`Error fetching stats for team ${teamId}:`, err);
     return new Response(JSON.stringify({ error: true }), {
@@ -166,27 +166,6 @@ async function handleMessageStatsRequest(data, env) {
       status: 500,
     });
   }
-}
-
-
-function pLimit(concurrency) {
-  const queue = [];
-  let activeCount = 0;
-
-  const next = () => {
-    if (queue.length === 0 || activeCount >= concurrency) return;
-    activeCount++;
-    const { fn, resolve, reject } = queue.shift();
-    fn().then(resolve).catch(reject).finally(() => {
-      activeCount--;
-      next();
-    });
-  };
-
-  return (fn) => new Promise((resolve, reject) => {
-    queue.push({ fn, resolve, reject });
-    next();
-  });
 }
 
 async function runWithConcurrencyLimit(tasks, limit) {
