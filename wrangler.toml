@@ -17,7 +17,7 @@ queue = "team-stats-queue"
 queue = "team-stats-queue"
 
 [triggers]
-crons = ["0 * * * *"] # every hour at minute 0
+crons = ["*/15 * * * *"]
 
 [logs]
 level = "info"
