@@ -169,18 +169,13 @@ async function handleMessageStatsRequest(data, env) {
   }
 }
 
-async function processInChunks(tasks, chunkSize = 10) {
+async function processInChunks(promises, chunkSize = 10) {
   const results = [];
 
-  for (let i = 0; i < tasks.length; i += chunkSize) {
-    const chunk = tasks.slice(i, i + chunkSize);
-
-    const settled = await Promise.allSettled(chunk.map(fn => fn()));
-
+  for (let i = 0; i < promises.length; i += chunkSize) {
+    const chunk = promises.slice(i, i + chunkSize);
+    const settled = await Promise.allSettled(chunk);
     results.push(...settled);
-
-    // Optional: delay between chunks
-    await new Promise(r => setTimeout(r, 1000));
   }
 
   return results;
