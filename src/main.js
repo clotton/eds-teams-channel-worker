@@ -92,7 +92,7 @@ export default {
 
   async queue(batch, env, ctx) {
     for (const msg of batch.messages) {
-      const { teamId } = JSON.parse(msg.body);
+      const teamId = msg.body.teamId;
       ctx.waitUntil(processTeamStats(teamId, env));
     }
   },
