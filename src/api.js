@@ -190,7 +190,7 @@ async function getTeamMessageStats(teamId, bearer) {
 
   const channels = (await channelsRes.json()).value || [];
   const targetChannel = channels.find(c => ['main', 'general'].includes(c.displayName?.toLowerCase()));
-  if (!targetChannel) return { messageCount: 0, latestMessage: null, recentCount: 0, partial: false };
+  if (!targetChannel) return { messageCount: 0, latestMessage: null, recentCount: 0 };
 
   let count = 0;
   let recentCount = 0;
@@ -269,6 +269,8 @@ async function fetchRepliesAndCount(messageId, headers, teamId, channelId, cutof
       }
     }
     url = data['@odata.nextLink'] || null;
+    await new Promise(r => setTimeout(r, 500));
+
   }
 
   return { replyCount, recentReplyCount, latestReply };
