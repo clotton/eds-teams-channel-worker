@@ -11,5 +11,5 @@ id = "862abef7a5eb46c996ce6c4261c640c0"
 
 
 [triggers]
-crons = ["0 * * * *"]
+crons = ["*/15 * * * *"]
 

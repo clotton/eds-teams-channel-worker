@@ -56,7 +56,30 @@ async function getGraphToken(env) {
   return json.access_token;
 }
 
+async function handleCronJob(env) {
+  const bearer = await getGraphToken(env);
+
+  const data = { bearer, env, nameFilter: 'aem-', descriptionFilter: 'Edge Delivery' };
+  const teams = await getAllTeams(data); // Your function to list teams
+
+  for (const team of teams) {
+    try {
+      const stats = await getTeamMessageStats(team.id, bearer);
+      if (stats) {
+        const key = team.id;
+        await env.TEAMS_KV.put(key, JSON.stringify(stats));
+      }
+    } catch (err) {
+      console.error(`Error processing ${team.id}:`, err);
+    }
+  }
+}
+
 export default {
+  async scheduled(event, env, ctx) {
+    ctx.waitUntil(handleCronJob(env));
+  },
+
   async fetch(request, env) {
     try {
       const url = new URL(request.url);
