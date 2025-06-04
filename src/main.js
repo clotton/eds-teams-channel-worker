@@ -24,7 +24,7 @@ const options = async (request, env) => {
   });
 };
 
-const jsonToResponse = async (data, fct) => {
+const jsonToResponse = async (data, fct, env) => {
   try {
     const json = await fct(data);
     return new Response(JSON.stringify(json || 'Not found'), {
