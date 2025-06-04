@@ -82,7 +82,7 @@ const getTeamById = async (data) => {
     Accept: 'application/json',
   };
 
-  const response = await fetch(url, { method: 'GET', headers });
+  const response = await fetchWithRetry(url, { method: 'GET', headers });
   if (response.ok) {
     return await response.json();
   }
