@@ -26,7 +26,7 @@ const options = async (request, env) => {
 
 const jsonToResponse = async (data, fct, env) => {
   try {
-    const json = await fct(data);
+    const json = await fct(data, env);
     return new Response(JSON.stringify(json || 'Not found'), {
       status: json ? 200 : 404,
       headers: CORS_HEADERS(env),

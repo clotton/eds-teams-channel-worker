@@ -45,7 +45,7 @@ const getUser = async (email, bearer) => {
   return null;
 };
 
-const getUserTeams = async (data) => {
+const getUserTeams = async (data, env) => {
   const user = await getUser(data.id, data.bearer);
   if (!user) return null;
 
@@ -90,7 +90,7 @@ const getTeamById = async (data) => {
   return null;
 };
 
-const getTeamMembers = async (data) => {
+const getTeamMembers = async (data, env) => {
 
   const headers = {
     Authorization: `Bearer ${data.bearer}`,
@@ -118,7 +118,7 @@ const getTeamMembers = async (data) => {
   return null;
 }
 
-const getAllTeams = async (data) => {
+const getAllTeams = async (data, env) => {
   const headers = {
     Authorization: `Bearer ${data.bearer}`,
   };
@@ -158,6 +158,8 @@ async function handleMessageStatsRequest(data, env) {
   }
 
   try {
+    const messageStats = env.TEAMS_KV.get(teamId);
+    console.log(`Fetched stats from KV for team ${teamId}:`, messageStats);
     return await env.TEAMS_KV.get(teamId);
   } catch (err) {
     console.error(`Error fetching stats for team ${teamId}:`, err);
@@ -275,7 +277,7 @@ async function fetchRepliesAndCount(messageId, headers, teamId, channelId, cutof
   return { replyCount, recentReplyCount, latestReply };
 }
 
-async function inviteUser(data) {
+async function inviteUser(data, env) {
   const url = `https://graph.microsoft.com/v1.0/invitations`;
 
   const headers = {
@@ -363,7 +365,7 @@ async function addGuestToTeam(data) {
   });
 }
 
-async function addTeamMembers(data) {
+async function addTeamMembers(data, env) {
   const results = [];
 
   const team = await getTeamById(data);
