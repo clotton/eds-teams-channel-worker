@@ -6,7 +6,8 @@ import {
   getTeamMembers,
   getUserTeams,
   inviteUser,
-  handleMessageStatsRequest
+  handleMessageStatsRequest,
+  getTeamMessageStats
 } from "./api";
 
 
