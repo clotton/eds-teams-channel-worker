@@ -20,6 +20,4 @@ binding = "TEAM_STATS_QUEUE"
 [[queues.consumers]]
 queue = "team-stats-queue"
 binding = "TEAM_STATS_QUEUE"
-batch_size = 1
-max_batch_timeout = 10
 
