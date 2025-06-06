@@ -103,10 +103,33 @@ export default {
   async fetch(request, env) {
     try {
       const url = new URL(request.url);
-      const {searchParams } = url;
+      const { searchParams } = url;
       const paths = decodeURI(url.pathname).split('/').filter(Boolean);
       let action;
       const data = {};
+
+      // Get token from header or query param
+      let turnstileToken = request.headers.get('CF-Turnstile-Token')
+      if (!turnstileToken) {
+        turnstileToken = searchParams.get('cf_turnstile_token')
+      }
+      if (!turnstileToken) {
+        return new Response('Missing Turnstile token', { status: 400 })
+      }
+
+      // Verify token with Turnstile backend
+      const secret = '0x4AAAAAABgUTzLXTndkkGsv8V7BzyBnMQk'; // stored in Worker environment variables
+
+      const verifyResp = await fetch('https://challenges.cloudflare.com/turnstile/v0/siteverify', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+        body: `secret=${encodeURIComponent(secret)}&response=${encodeURIComponent(turnstileToken)}`
+      })
+      const verifyJson = await verifyResp.json()
+
+      if (!verifyJson.success) {
+        return new Response('Turnstile verification failed', { status: 403 })
+      }
 
       if (request.method === 'OPTIONS') {
         return options(request, env);
