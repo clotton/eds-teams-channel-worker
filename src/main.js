@@ -136,6 +136,7 @@ export default {
         case 'teams': {
             data.nameFilter = searchParams.get("nameFilter") || '';
             data.descriptionFilter = searchParams.get("descriptionFilter") || '';
+            data.env = env;
             return jsonToResponse(data, getAllTeams);
         }
         case 'teams-summary': {

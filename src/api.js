@@ -130,7 +130,7 @@ const getTeamMembers = async (data, env) => {
   return null;
 }
 
-const getAllTeams = async (data, env) => {
+const getAllTeams = async (data) => {
   const headers = {
     Authorization: `Bearer ${data.bearer}`,
   };
