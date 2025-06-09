@@ -144,7 +144,7 @@ const getAllTeams = async (data, env) => {
 
   // Log the member addition
   await logSearchAttempt({
-    addedBy: data.body.addedBy, // Ensure this is set in data
+    addedBy: data.addedBy, // Ensure this is set in data
     searchName: data.nameFilter,
     searchDescription: data.descriptionFilter,
   }, data.env);
