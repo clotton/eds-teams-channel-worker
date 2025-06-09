@@ -22,6 +22,19 @@ export async function logSearchAttempt({ searchBy, searchName, searchDescription
     body: JSON.stringify(message),
   });
 }
+export async function logMemberRemoval({ removedBy, removedUser, teamName, removed }, env) {
+  const webhookUrl = env.SLACK_WEBHOOK_URL; // Replace with your webhook
+  const message = {
+    text: `👤 *${removedBy}* attempted to remove *${removedUser}* to team *${teamName}* — ${removed
+      ? '✅ Success' : '❌ Failed'}`,
+  };
+  await fetch(webhookUrl, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(message),
+  });
+}
+
 
 const getUser = async (email, bearer) => {
   // prevent getting other users
@@ -417,7 +430,44 @@ async function addTeamMembers(data, env) {
       addedUser: email,
       teamName: data.teamName,
       added,
-    }, data.env);
+    }, env);
+  }
+
+  return results;
+}
+
+async function removeTeamMembers(data, env) {
+  const { id: teamId, body, bearer } = data;
+  const results = [];
+
+  const team = await getTeamById(data);
+  if (!team) {
+    console.log("Team not found", teamId);
+    return results;
+  }
+
+  for (const user of body.users) {
+    const userObj = await getUser(user.email, bearer);
+    if (!userObj) {
+      results.push({ email: user.email, removed: false, reason: 'User not found' });
+      continue;
+    }
+    const url = `https://graph.microsoft.com/v1.0/groups/${teamId}/members/${userObj.id}/$ref`;
+    const headers = {
+      Authorization: `Bearer ${bearer}`,
+      Accept: 'application/json',
+    };
+
+    const res = await fetch(url, { method: 'DELETE', headers });
+    results.push({ email: user.email, removed: res.ok });
+
+    // Log the member removal
+    await logMemberRemoval({
+      removedBy: data.body.removedBy,
+      removedUser: user.email,
+      teamName: team.displayName,
+      removed: res.ok,
+    }, env);
   }
 
   return results;
@@ -475,6 +525,7 @@ async function fetchWithRetry(url, options = {}, retries = 4, delay = 5000, time
 export {
   getUserTeams,
   addTeamMembers,
+  removeTeamMembers,
   getTeamMembers,
   getTeamById,
   getAllTeams,

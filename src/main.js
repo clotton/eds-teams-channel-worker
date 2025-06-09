@@ -3,6 +3,7 @@ import {
   getAllTeams,
   getTeamById,
   addTeamMembers,
+  removeTeamMembers,
   getTeamMembers,
   getUserTeams,
   inviteUser,
@@ -112,7 +113,7 @@ export default {
       if (request.method === 'OPTIONS') {
         return options(request, env);
       }
-      if (request.method === 'POST') {
+      if (request.method === 'POST' || request.method === 'DELETE') {
         data.body = await request.json();
       }
 
@@ -177,8 +178,10 @@ export default {
             return jsonToResponse(data, getTeamMembers);
           }
           if (request.method === 'POST') {
-            data.env = env;
-            return jsonToResponse(data, addTeamMembers);
+            return jsonToResponse(data, addTeamMembers, env);
+          }
+          if (request.method === 'DELETE') {
+            return jsonToResponse(data, removeTeamMembers, env);
           }
           break;
         }
