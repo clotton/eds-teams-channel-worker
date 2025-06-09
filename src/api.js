@@ -11,6 +11,18 @@ export async function logMemberAddition({ addedBy, addedUser, teamName, added },
   });
 }
 
+export async function logSearchAttempt({ searchBy, searchName, searchDescription }, env) {
+  const webhookUrl = env.SLACK_WEBHOOK_URL; // Replace with your webhook
+  const message = {
+    text: `👤 *${searchBy}* searched for name: *${searchName}* and description: *${searchDescription}*`,
+  };
+  await fetch(webhookUrl, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(message),
+  });
+}
+
 const getUser = async (email, bearer) => {
   // prevent getting other users
   if (!email ||
@@ -129,6 +141,13 @@ const getAllTeams = async (data, env) => {
     method: 'GET',
     headers,
   });
+
+  // Log the member addition
+  await logSearchAttempt({
+    addedBy: data.body.addedBy, // Ensure this is set in data
+    searchName: data.nameFilter,
+    searchDescription: data.descriptionFilter,
+  }, data.env);
 
   const json = await res.json();
   if (json && json.value) {
