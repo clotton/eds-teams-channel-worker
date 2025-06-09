@@ -59,8 +59,9 @@ async function getGraphToken(env) {
 
 async function handleCronJob(env) {
   const bearer = await getGraphToken(env);
+  const searchBy = "Cron Job";
 
-  const data = { bearer, env, nameFilter: '', descriptionFilter: '' };
+  const data = { bearer, searchBy, env, nameFilter: '', descriptionFilter: '' };
   const teams = await getAllTeams(data);
 
   for (const team of teams) {
@@ -134,6 +135,7 @@ export default {
     if (data.bearer) {
       switch (action) {
         case 'teams': {
+            data.searchBy = searchParams.get("searchBy") || '';
             data.nameFilter = searchParams.get("nameFilter") || '';
             data.descriptionFilter = searchParams.get("descriptionFilter") || '';
             data.env = env;
