@@ -86,6 +86,25 @@ async function processTeamStats(teamId, env) {
   }
 }
 
+async function verifyTurnstileToken(token, env) {
+  if (!token) return false;
+
+  const formData = new URLSearchParams();
+  formData.append('secret', env.TURNSTILE_SECRET_KEY);
+  formData.append('response', token);
+
+  try {
+    const resp = await fetch('https://challenges.cloudflare.com/turnstile/v0/siteverify', {
+      method: 'POST',
+      body: formData
+    });
+    const data = await resp.json();
+    return data.success === true;
+  } catch (e) {
+    console.error('Turnstile verification error:', e);
+    return false;
+  }
+}
 
 export default {
   async scheduled(event, env, ctx) {
@@ -113,6 +132,27 @@ export default {
       if (request.method === 'OPTIONS') {
         return options(request, env);
       }
+
+      // Handle Turnstile verification endpoint
+      if (paths.length === 1 && paths[0] === 'verify-turnstile' && request.method === 'POST') {
+        const body = await request.json();
+        const token = body.token;
+
+        const valid = await verifyTurnstileToken(token, env);
+        if (valid) {
+          return new Response(JSON.stringify({ success: true }), {
+            status: 200,
+            headers: CORS_HEADERS(env),
+          });
+        } else {
+          return new Response(JSON.stringify({ success: false, error: 'Invalid token' }), {
+            status: 403,
+            headers: CORS_HEADERS(env),
+          });
+        }
+      }
+
+
       if (request.method === 'POST' || request.method === 'DELETE') {
         data.body = await request.json();
       }
