@@ -13,8 +13,11 @@ export async function logMemberAddition({ addedBy, addedUser, teamName, added },
 
 export async function logSearchAttempt({ searchBy, searchName, searchDescription }, env) {
   const webhookUrl = env.SLACK_WEBHOOK_URL; // Replace with your webhook
+  const searchNameMod = searchName ?? '*';
+  const searchDescMod = searchDescription ?? '*';
+
   const message = {
-    text: `👤 *${searchBy}* searched Teams for name: *${searchName}* and description: *${searchDescription}*`,
+    text: `👤 *${searchBy}* searched Teams for name: *${searchNameMod}* and description: *${searchDescMod}*`,
   };
   await fetch(webhookUrl, {
     method: 'POST',
@@ -22,6 +25,7 @@ export async function logSearchAttempt({ searchBy, searchName, searchDescription
     body: JSON.stringify(message),
   });
 }
+
 export async function logMemberRemoval({ removedBy, removedUser, teamName, removed }, env) {
   const webhookUrl = env.SLACK_WEBHOOK_URL; // Replace with your webhook
   const message = {
