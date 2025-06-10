@@ -134,7 +134,7 @@ export default {
       }
 
       // Handle Turnstile verification endpoint
-      if (paths.length === 1 && paths[0] === 'turnstile-verify' && request.method === 'POST') {
+      if (paths.length === 1 && paths[0] === 'verify-turnstile' && request.method === 'POST') {
         const body = await request.json();
         const token = body.token;
 
