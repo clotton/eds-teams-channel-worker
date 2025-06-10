@@ -1,7 +1,7 @@
 export async function logMemberAddition({ addedBy, addedUser, teamName, added }, env) {
   const webhookUrl = env.SLACK_WEBHOOK_URL; // Replace with your webhook
   const message = {
-    text: `👤 *${addedBy}* attempted to add *${addedUser}* to team *${teamName}* — ${added
+    text: `👤 *${addedBy}* added *${addedUser}* to team *${teamName}* — ${added
       ? '✅ Success' : '❌ Failed'}`,
   };
   await fetch(webhookUrl, {
@@ -25,7 +25,7 @@ export async function logSearchAttempt({ searchBy, searchName, searchDescription
 export async function logMemberRemoval({ removedBy, removedUser, teamName, removed }, env) {
   const webhookUrl = env.SLACK_WEBHOOK_URL; // Replace with your webhook
   const message = {
-    text: `👤 *${removedBy}* attempted to remove *${removedUser}* to team *${teamName}* — ${removed
+    text: `👤 *${removedBy}* removed *${removedUser}* to team *${teamName}* — ${removed
       ? '✅ Success' : '❌ Failed'}`,
   };
   await fetch(webhookUrl, {
