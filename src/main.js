@@ -1,6 +1,7 @@
 import {CORS_HEADERS} from "./constants";
 import {
   getAllTeams,
+  createTeam,
   getTeamById,
   addTeamMembers,
   removeTeamMembers,
@@ -153,7 +154,7 @@ export default {
       }
 
 
-      if (request.method === 'POST' || request.method === 'DELETE') {
+      if (['POST', 'PUT', 'DELETE'].includes(request.method)) {
         data.body = await request.json();
       }
 
@@ -176,11 +177,16 @@ export default {
     if (data.bearer) {
       switch (action) {
         case 'teams': {
+          if (request.method === 'GET') {
             data.searchBy = searchParams.get("searchBy") || '';
             data.nameFilter = searchParams.get("nameFilter") || '';
             data.descriptionFilter = searchParams.get("descriptionFilter") || '';
             data.env = env;
             return jsonToResponse(data, getAllTeams);
+          } else if (request.method === 'POST') {
+              return jsonToResponse(data, createTeam);
+            }
+          break;
         }
         case 'teams-summary': {
           const teamIds = data.body.teamIds || [];

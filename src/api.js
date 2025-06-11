@@ -1,3 +1,5 @@
+import logo from './logo.js';
+
 export async function logMemberAddition({ addedBy, addedUser, teamName, added }, env) {
   const webhookUrl = env.SLACK_WEBHOOK_URL; // Replace with your webhook
   const message = {
@@ -38,7 +40,6 @@ export async function logMemberRemoval({ removedBy, removedUser, teamName, remov
     body: JSON.stringify(message),
   });
 }
-
 
 const getUser = async (email, bearer) => {
   // prevent getting other users
@@ -103,6 +104,162 @@ const getUserTeams = async (data, env) => {
   }
   return null;
 }
+
+const getOwners = async (bearer) => {
+  const params = new URLSearchParams({
+    '$filter': `startsWith(mail,'admin_')`,
+    '$select': 'id,mail,displayName',
+    '$count': 'true'
+  });
+
+  const headers = {
+    ConsistencyLevel: 'eventual',
+    Authorization: `Bearer ${bearer}`,
+  };
+
+  const url = `https://graph.microsoft.com/v1.0/users?${params}`
+  const res = await fetch(url, {
+    method: 'GET',
+    headers,
+  });
+
+  if (res.ok) {
+    const json = await res.json();
+    if (json.value && json.value.length > 0) {
+      return json.value.map(o => {
+        return {
+          id: o.id,
+          email: o.mail,
+          displayName: o.displayName,
+        };
+      });
+    }
+  }
+
+  return [];
+};
+
+const updateTeamPhoto = async (data) => {
+  const { id } = data.body;
+  if (id) {
+    const headers = {
+      Authorization: `Bearer ${data.bearer}`,
+      'Content-Type': 'image/png',
+    };
+    const url = `https://graph.microsoft.com/v1.0/groups/${id}/photo/$value`;
+    console.log('Updating photo', url);
+
+    const res = await fetch(url, {
+      method: 'PUT',
+      headers,
+      body: logo(),
+    });
+
+    console.log('Photo updated', res.status, res.statusText);
+  }
+};
+
+const addMembers = async (teamId, members, bearer) => {
+  const headers = {
+    Authorization: `Bearer ${bearer}`,
+    'Content-Type': 'application/json',
+  };
+
+  const url = `https://graph.microsoft.com/v1.0/teams/${teamId}/members/add`;
+  const body = {
+    values:[]
+  };
+
+  members.forEach(member => {
+    const m = {
+      '@odata.type': 'microsoft.graph.aadUserConversationMember',
+      roles: [],
+      'user@odata.bind': `https://graph.microsoft.com/v1.0/users(\'${member.id}\')`
+    };
+    if (member.role) m.roles.push(member.role);
+    body.values.push(m);
+  });
+
+  console.log('Adding members', body.values);
+
+  await fetch(url, {
+    method: 'POST',
+    headers,
+    body: JSON.stringify(body),
+  });
+};
+
+
+const createTeam = async (data) => {
+  const owners = await getOwners(data.bearer);
+  if (!owners || owners.length === 0) {
+    console.error('No owners found');
+    return null;
+  }
+
+  const { name, description = '' } = data.body;
+  if (name) {
+    const headers = {
+      Authorization: `Bearer ${data.bearer}`,
+      'Content-Type': 'application/json',
+    };
+
+    const url = `https://graph.microsoft.com/v1.0/teams`;
+    const body = {
+      'template@odata.bind': 'https://graph.microsoft.com/v1.0/teamsTemplates(\'standard\')',
+      visibility: 'public',
+      displayName: name,
+      description,
+      guestSettings: {
+        'allowCreateUpdateChannels': true,
+      },
+      members:[]
+    };
+
+    // api accepts only 1 member...
+    owners.filter(o => o.email.startsWith('admin_ck')).forEach(o => {
+      body.members.push({
+        '@odata.type': '#microsoft.graph.aadUserConversationMember',
+        roles:[
+          'owner'
+        ],
+        'user@odata.bind': `https://graph.microsoft.com/v1.0/users('${o.id}')`
+      });
+    });
+
+    const res = await fetch(url, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify(body),
+    });
+
+    if (res.ok) {
+      const location = res.headers.get('location');
+      const id = location.split('\'')[1];
+      console.log('Team created', id);
+
+      //wait 2 seconds... object not found if too fast
+      await new Promise(resolve => setTimeout(resolve, 2000));
+
+      await updateTeamPhoto({bearer: data.bearer, body: {id}});
+
+      const remaining = owners.filter(o => !o.email.startsWith('admin_ck')).map(
+        o => {
+          return {
+            id: o.id,
+            role: 'owner',
+          };
+        });
+      // await addMembers (id, remaining, data.bearer);
+
+      return {
+        name,
+        description,
+      };
+    }
+  }
+  return null;
+};
 
 const getTeamById = async (data) => {
   const url = `https://graph.microsoft.com/v1.0/teams/${data.id}`
@@ -527,6 +684,7 @@ async function fetchWithRetry(url, options = {}, retries = 4, delay = 5000, time
 
 export {
   getUserTeams,
+  createTeam,
   addTeamMembers,
   removeTeamMembers,
   getTeamMembers,
