@@ -1,39 +1,7 @@
 import logo from './logo.js';
 
-export async function logMemberAddition({ addedBy, addedUser, teamName, added }, env) {
-  const webhookUrl = env.SLACK_WEBHOOK_URL; // Replace with your webhook
-  const message = {
-    text: `👤 *${addedBy}* added *${addedUser}* to team *${teamName}* — ${added
-      ? '✅ Success' : '❌ Failed'}`,
-  };
-  await fetch(webhookUrl, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(message),
-  });
-}
-
-export async function logSearchAttempt({ searchBy, searchName, searchDescription }, env) {
-  const webhookUrl = env.SLACK_WEBHOOK_URL; // Replace with your webhook
-  const searchNameMod = searchName ?? '*';
-  const searchDescMod = searchDescription ?? '*';
-
-  const message = {
-    text: `👤 *${searchBy}* searched Teams for name: *${searchNameMod}* and description: *${searchDescMod}*`,
-  };
-  await fetch(webhookUrl, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(message),
-  });
-}
-
-export async function logMemberRemoval({ removedBy, removedUser, teamName, removed }, env) {
-  const webhookUrl = env.SLACK_WEBHOOK_URL; // Replace with your webhook
-  const message = {
-    text: `👤 *${removedBy}* removed *${removedUser}* to team *${teamName}* — ${removed
-      ? '✅ Success' : '❌ Failed'}`,
-  };
+export async function logEvent(message, env) {
+  const webhookUrl = env.SLACK_WEBHOOK_URL;
   await fetch(webhookUrl, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -75,7 +43,7 @@ const getUser = async (email, bearer) => {
   return null;
 };
 
-const getUserTeams = async (data, env) => {
+const getUserTeams = async (data) => {
   const user = await getUser(data.id, data.bearer);
   if (!user) return null;
 
@@ -276,7 +244,7 @@ const getTeamById = async (data) => {
   return null;
 };
 
-const getTeamMembers = async (data, env) => {
+const getTeamMembers = async (data) => {
 
   const headers = {
     Authorization: `Bearer ${data.bearer}`,
@@ -305,8 +273,12 @@ const getTeamMembers = async (data, env) => {
 }
 
 const getAllTeams = async (data) => {
+  const { searchBy, nameFilter, descriptionFilter, env, bearer } = data;
+  const searchNameMod = nameFilter ?? '*';
+  const searchDescMod = descriptionFilter ?? '*';
+
   const headers = {
-    Authorization: `Bearer ${data.bearer}`,
+    Authorization: `Bearer ${bearer}`,
   };
 
   const url = `https://graph.microsoft.com/v1.0/teams`;
@@ -316,11 +288,9 @@ const getAllTeams = async (data) => {
     headers,
   });
 
-  await logSearchAttempt({
-    searchBy: data.searchBy, // Ensure this is set in data
-    searchName: data.nameFilter,
-    searchDescription: data.descriptionFilter,
-  }, data.env);
+  await logEvent({
+      text: `👤 *${searchBy}* searched Teams for name: *${searchNameMod}* and description: *${searchDescMod}*`,
+    }, env);
 
   const json = await res.json();
   if (json && json.value) {
@@ -470,7 +440,7 @@ async function fetchRepliesAndCount(messageId, headers, teamId, channelId, cutof
   return { replyCount, recentReplyCount, latestReply };
 }
 
-async function inviteUser(data, env) {
+async function inviteUser(data) {
   const url = `https://graph.microsoft.com/v1.0/invitations`;
 
   const headers = {
@@ -528,7 +498,7 @@ async function inviteToTeam(data) {
 }
 
 // Invite guest if not in directory, else retrieve existing user
-async function ensureGuestUser(data) {
+async function ensureGuestUser(data){
   const user = await getUser(data.email, data.bearer);
   if (!user)  {
     console.log("User not found, inviting to team", data.email);
@@ -567,11 +537,10 @@ async function addTeamMembers(data, env) {
     return results;
   }
   data.teamName = team.displayName || '';
-  // Loop over the full user objects: { displayName, email }
+
   const uniqueUsers = Array.from(new Map(data.body.users.map(u => [u.email, u])).values());
   for (const user of uniqueUsers) {
-    const { displayName , email } = user;
-
+    const { displayName, email } = user;
     const userId = await ensureGuestUser({...data, email, displayName });
     let added = false;
 
@@ -584,50 +553,43 @@ async function addTeamMembers(data, env) {
 
     results.push({ email, added });
 
-    // Log the member addition
-    await logMemberAddition({
-      addedBy: data.body.addedBy, // Ensure this is set in data
-      addedUser: email,
-      teamName: data.teamName,
-      added,
-    }, env);
+    await logEvent({
+      text: `👤 *${data.body.addedBy}* added *${email}* to team *${team.displayName}* — ${added ? '✅ *Success*' : '❌ *Failed*'}`
+      }, env);
   }
 
   return results;
 }
 
 async function removeTeamMembers(data, env) {
-  const { id: teamId, body, bearer } = data;
   const results = [];
 
   const team = await getTeamById(data);
   if (!team) {
-    console.log("Team not found", teamId);
+    console.log("Team not found", data.id);
     return results;
   }
 
-  for (const user of body.users) {
-    const userObj = await getUser(user.email, bearer);
+  for (const user of data.body.users) {
+    const userObj = await getUser(user.email, data.bearer);
     if (!userObj) {
       results.push({ email: user.email, removed: false, reason: 'User not found' });
       continue;
     }
-    const url = `https://graph.microsoft.com/v1.0/groups/${teamId}/members/${userObj.id}/$ref`;
+
+    const url = `https://graph.microsoft.com/v1.0/groups/${data.id}/members/${userObj.id}/$ref`;
     const headers = {
-      Authorization: `Bearer ${bearer}`,
+      Authorization: `Bearer ${data.bearer}`,
       Accept: 'application/json',
     };
 
     const res = await fetch(url, { method: 'DELETE', headers });
     results.push({ email: user.email, removed: res.ok });
 
-    // Log the member removal
-    await logMemberRemoval({
-      removedBy: data.body.removedBy,
-      removedUser: user.email,
-      teamName: team.displayName,
-      removed: res.ok,
-    }, env);
+    await logEvent({
+        text: `👤 *${data.body.removedBy}* removed *${user.email}* to team *${team.displayName}* — ${res.ok
+          ? '✅ Success' : '❌ Failed'}`
+      }, env);
   }
 
   return results;
@@ -679,8 +641,6 @@ async function fetchWithRetry(url, options = {}, retries = 4, delay = 5000, time
     }
   }
 }
-
-
 
 export {
   getUserTeams,
