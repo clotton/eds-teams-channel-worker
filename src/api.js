@@ -148,30 +148,65 @@ const addMembers = async (teamId, members, bearer) => {
     body.values.push(m);
   });
 
-  console.log('Adding members', body.values);
-
-  await fetch(url, {
+  const res = await fetch(url, {
     method: 'POST',
     headers,
     body: JSON.stringify(body),
   });
+
+  console.log('Add members response', res.status, res.statusText);
 };
 
+const getChannels = async (teamId, bearer) => {
+  const headers = {
+    Authorization: `Bearer ${bearer}`,
+  };
 
-const createTeam = async (data) => {
-  const owners = await getOwners(data.bearer);
-  if (!owners || owners.length === 0) {
-    console.error('No owners found');
-    return null;
+  const url = `https://graph.microsoft.com/v1.0/teams/${teamId}/channels`;
+
+  const res = await fetch(url, {
+    method: 'GET',
+    headers,
+  });
+
+  const json = await res.json();
+  if (json && json.value) {
+    return json.value;
   }
 
+  return null;
+}
+
+const renameChannel = async (teamId, channelId, bearer) => {
+  const headers = {
+    Authorization: `Bearer ${bearer}`,
+    'Content-Type': 'application/json',
+  };
+
+  const url = `https://graph.microsoft.com/v1.0/teams/${teamId}/channels/${channelId}`;
+  const body = {
+      "displayName": 'Main',
+    }
+
+  const res = await fetch(url, {
+    method: 'PATCH',
+    headers,
+    body: JSON.stringify(body),
+  });
+
+  console.log('Channel renamed', res.status, res.statusText);
+
+};
+
+const createTeam = async (data, env) => {
   const { name, description = '' } = data.body;
+
   if (name) {
+    console.log('Creating team', name, description);
     const headers = {
       Authorization: `Bearer ${data.bearer}`,
       'Content-Type': 'application/json',
     };
-
     const url = `https://graph.microsoft.com/v1.0/teams`;
     const body = {
       'template@odata.bind': 'https://graph.microsoft.com/v1.0/teamsTemplates(\'standard\')',
@@ -183,7 +218,11 @@ const createTeam = async (data) => {
       },
       members:[]
     };
-
+    const owners = await getOwners(data.bearer);
+    if (!owners || owners.length === 0) {
+      console.error('No owners found');
+      return null;
+    }
     // api accepts only 1 member...
     owners.filter(o => o.email.startsWith('admin_ck')).forEach(o => {
       body.members.push({
@@ -195,36 +234,49 @@ const createTeam = async (data) => {
       });
     });
 
-    const res = await fetch(url, {
-      method: 'POST',
-      headers,
-      body: JSON.stringify(body),
-    });
+    // 1. Create team with initial owner
+    const res = await fetch(url, { method: 'POST', headers, body: JSON.stringify(body) });
+    if (!res.ok) throw new Error('Failed to create team');
+    const location = res.headers.get('location');
+    const id = location.split("'")[1];
 
-    if (res.ok) {
-      const location = res.headers.get('location');
-      const id = location.split('\'')[1];
-      console.log('Team created', id);
-
-      //wait 2 seconds... object not found if too fast
-      await new Promise(resolve => setTimeout(resolve, 2000));
-
-      await updateTeamPhoto({bearer: data.bearer, body: {id}});
-
-      const remaining = owners.filter(o => !o.email.startsWith('admin_ck')).map(
-        o => {
-          return {
-            id: o.id,
-            role: 'owner',
-          };
-        });
-      // await addMembers (id, remaining, data.bearer);
-
-      return {
-        name,
-        description,
-      };
+    // 2. Wait for team to be ready (polling)
+    let ready = false, retries = 10;
+    while (!ready && retries-- > 0) {
+      await new Promise(r => setTimeout(r, 2000));
+      const team = await getTeamById({ id, bearer: data.bearer });
+      if (team) ready = true;
     }
+    if (!ready) throw new Error('Team provisioning timeout');
+    console.log('Team created', id);
+
+    // 3. Update photo and rename channel
+    await updateTeamPhoto({ bearer: data.bearer, body: { id } });
+    const channels = await getChannels(id, data.bearer);
+    const targetChannel = channels?.find(c => c.displayName?.toLowerCase() === 'general');
+    if (targetChannel) await renameChannel(id, targetChannel.id, data.bearer);
+
+    // 4. Add all members (owners + guests)
+    const remaining = owners
+    .filter(o => o.email.startsWith('admin_cl') || o.email.startsWith('admin_dm'))
+    .map(o => ({ id: o.id, role: 'owner' }));
+    await addMembers (id, remaining, data.bearer);
+
+    const teamMembers = (env.TEAM_MEMBERS || '').split(',').map(e => e.trim()).filter(Boolean);
+    const users = await Promise.all(teamMembers.map(email => getUser(email, data.bearer)));
+    const validUsers = users.filter(Boolean).map(u => ({ id: u.id }));
+    let count = 0;
+    for (const u of validUsers) {
+      const res = await addGuestToTeam({id: id, bearer: data.bearer, userId: u.id});
+      if (res.ok) count = count + 1;
+    }
+    console.log(`Added guests:`, count);
+    // 5. Create Admin Tag
+    // 6. Post welcome message
+    return {
+      name,
+      description,
+    };
   }
   return null;
 };
@@ -288,10 +340,11 @@ const getAllTeams = async (data) => {
     headers,
   });
 
+  /*
   await logEvent({
       text: `👤 *${searchBy}* searched Teams for name: *${searchNameMod}* and description: *${searchDescMod}*`,
     }, env);
-
+*/
   const json = await res.json();
   if (json && json.value) {
     return json.value
