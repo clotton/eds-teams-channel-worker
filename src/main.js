@@ -12,6 +12,8 @@ import {
   getTeamMessageStats
 } from "./api";
 
+import { requireTurnstileHeader } from "./authentication";
+
 
 const options = async (request, env) => {
   if (request.method === 'OPTIONS') {
