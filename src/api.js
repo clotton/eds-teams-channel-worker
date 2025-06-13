@@ -256,9 +256,9 @@ const createTeam = async (data, env) => {
     const targetChannel = channels?.find(c => c.displayName?.toLowerCase() === 'general');
     if (targetChannel) await renameChannel(id, targetChannel.id, data.bearer);
 
-    // 4. Add all members (owners + guests)
+    // 4. Add all remaining owners
     const remaining = owners
-    .filter(o => !o.email.startsWith('admin_ck'))
+    .filter(o => o.email.startsWith('admin_cl'))
     .map(o => ({ id: o.id, role: 'owner' }));
     await addMembers (id, remaining, data.bearer);
 
@@ -272,7 +272,6 @@ const createTeam = async (data, env) => {
     }
     console.log(`Added guests:`, count);
     // 5. Create Admin Tag
-    // 6. Post welcome message
     return {
       name,
       description,
