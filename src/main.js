@@ -184,7 +184,7 @@ export default {
             data.env = env;
             return jsonToResponse(data, getAllTeams);
           } else if (request.method === 'POST') {
-              return jsonToResponse(data, createTeam);
+              return jsonToResponse(data, createTeam, env);
             }
           break;
         }
