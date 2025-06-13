@@ -258,13 +258,12 @@ const createTeam = async (data, env) => {
 
     // 4. Add all remaining owners
     const remaining = owners
-    .filter(o => o.email.startsWith('admin_cl'))
+    .filter(o => !o.email.startsWith('admin_ck'))
     .map(o => ({ id: o.id, role: 'owner' }));
     await addMembers (id, remaining, data.bearer);
 
     const teamMembers = (env.TEAM_GUESTS).split(',').map(e => e.trim()).filter(Boolean);
     const users = await Promise.all(teamMembers.map(email => getUser(email, data.bearer)));
-    console.log('Team users:', users);
     const validUsers = users.filter(Boolean).map(u => ({ id: u.id }));
     let count = 0;
     for (const u of validUsers) {
@@ -273,10 +272,11 @@ const createTeam = async (data, env) => {
     }
     console.log(`Added guests:`, count);
     // 5. Create Admin Tag
+    // 6. Post a welcome message
+    // 7. Log event to
     return {
       name,
       description,
-      teamMembers,
     };
   }
   return null;
@@ -341,11 +341,10 @@ const getAllTeams = async (data) => {
     headers,
   });
 
-  /*
   await logEvent({
       text: `👤 *${searchBy}* searched Teams for name: *${searchNameMod}* and description: *${searchDescMod}*`,
     }, env);
-*/
+
   const json = await res.json();
   if (json && json.value) {
     return json.value
