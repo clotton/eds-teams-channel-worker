@@ -87,26 +87,6 @@ async function processTeamStats(teamId, env) {
   }
 }
 
-async function verifyTurnstileToken(token, env) {
-  if (!token) return false;
-
-  const formData = new URLSearchParams();
-  formData.append('secret', env.TURNSTILE_SECRET_KEY);
-  formData.append('response', token);
-
-  try {
-    const resp = await fetch('https://challenges.cloudflare.com/turnstile/v0/siteverify', {
-      method: 'POST',
-      body: formData
-    });
-    const data = await resp.json();
-    return data.success === true;
-  } catch (e) {
-    console.error('Turnstile verification error:', e);
-    return false;
-  }
-}
-
 export default {
   async scheduled(event, env, ctx) {
     ctx.waitUntil(handleCronJob(env));
@@ -133,26 +113,6 @@ export default {
       if (request.method === 'OPTIONS') {
         return options(request, env);
       }
-
-      // Handle Turnstile verification endpoint
-      if (paths.length === 1 && paths[0] === 'verify-turnstile' && request.method === 'POST') {
-        const body = await request.json();
-        const token = body.token;
-
-        const valid = await verifyTurnstileToken(token, env);
-        if (valid) {
-          return new Response(JSON.stringify({ success: true }), {
-            status: 200,
-            headers: CORS_HEADERS(env),
-          });
-        } else {
-          return new Response(JSON.stringify({ success: false, error: 'Invalid token' }), {
-            status: 403,
-            headers: CORS_HEADERS(env),
-          });
-        }
-      }
-
 
       if (['POST', 'PUT', 'DELETE'].includes(request.method)) {
         data.body = await request.json();
@@ -227,6 +187,27 @@ export default {
             return jsonToResponse(data, addTeamMembers, env);
           }
           if (request.method === 'DELETE') {
+            // Handle Turnstile verification from header
+            const tokenHeader = request.headers.get('x-turnstile-token');
+
+            if (!tokenHeader) {
+              return new Response(JSON.stringify({
+                success: false,
+                error: 'Missing x-turnstile-token header',
+              }), {
+                status: 400,
+                headers: CORS_HEADERS(env),
+              });
+            }
+
+            const valid = await verifyTurnstileToken(tokenHeader, env);
+            if (!valid) {
+              return new Response(JSON.stringify({ success: false, error: 'Invalid Turnstile token' }), {
+                status: 403,
+                headers: CORS_HEADERS(env),
+              });
+            }
+
             return jsonToResponse(data, removeTeamMembers, env);
           }
           break;
