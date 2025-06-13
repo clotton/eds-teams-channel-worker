@@ -1,5 +1,4 @@
 import logo from './logo.js';
-import { requireTurnstileHeader } from './authentication.js';
 
 export async function logEvent(message, env) {
   const webhookUrl = env.SLACK_WEBHOOK_URL;

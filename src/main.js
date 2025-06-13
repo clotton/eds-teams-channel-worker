@@ -184,29 +184,14 @@ export default {
             return jsonToResponse(data, getTeamMembers);
           }
           if (request.method === 'POST') {
+            const turnstileResponse = await requireTurnstileHeader(request, env);
+            if (turnstileResponse) return turnstileResponse;
+
             return jsonToResponse(data, addTeamMembers, env);
           }
           if (request.method === 'DELETE') {
-            // Handle Turnstile verification from header
-            const tokenHeader = request.headers.get('x-turnstile-token');
-
-            if (!tokenHeader) {
-              return new Response(JSON.stringify({
-                success: false,
-                error: 'Missing x-turnstile-token header',
-              }), {
-                status: 400,
-                headers: CORS_HEADERS(env),
-              });
-            }
-
-            const valid = await verifyTurnstileToken(tokenHeader, env);
-            if (!valid) {
-              return new Response(JSON.stringify({ success: false, error: 'Invalid Turnstile token' }), {
-                status: 403,
-                headers: CORS_HEADERS(env),
-              });
-            }
+            const turnstileResponse = await requireTurnstileHeader(request, env);
+            if (turnstileResponse) return turnstileResponse;
 
             return jsonToResponse(data, removeTeamMembers, env);
           }
