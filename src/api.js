@@ -263,7 +263,9 @@ const createTeam = async (data, env) => {
     await addMembers (id, remaining, data.bearer);
 
     const teamMembers = (env.TEAM_GUESTS || '').split(',').map(e => e.trim()).filter(Boolean);
+    console.log('Team members:', teamMembers);
     const users = await Promise.all(teamMembers.map(email => getUser(email, data.bearer)));
+    console.log('Team users:', users);
     const validUsers = users.filter(Boolean).map(u => ({ id: u.id }));
     let count = 0;
     for (const u of validUsers) {
