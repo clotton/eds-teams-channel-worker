@@ -262,8 +262,7 @@ const createTeam = async (data, env) => {
     .map(o => ({ id: o.id, role: 'owner' }));
     await addMembers (id, remaining, data.bearer);
 
-    const teamMembers = (env.TEAM_GUESTS || '').split(',').map(e => e.trim()).filter(Boolean);
-    console.log('Team members:', teamMembers);
+    const teamMembers = (env.TEAM_GUESTS).split(',').map(e => e.trim()).filter(Boolean);
     const users = await Promise.all(teamMembers.map(email => getUser(email, data.bearer)));
     console.log('Team users:', users);
     const validUsers = users.filter(Boolean).map(u => ({ id: u.id }));
@@ -277,6 +276,7 @@ const createTeam = async (data, env) => {
     return {
       name,
       description,
+      teamMembers,
     };
   }
   return null;
