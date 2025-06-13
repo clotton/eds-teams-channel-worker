@@ -258,11 +258,11 @@ const createTeam = async (data, env) => {
 
     // 4. Add all members (owners + guests)
     const remaining = owners
-    .filter(o => o.email.startsWith('admin_cl') || o.email.startsWith('admin_dm'))
+    .filter(o => !o.email.startsWith('admin_ck'))
     .map(o => ({ id: o.id, role: 'owner' }));
     await addMembers (id, remaining, data.bearer);
 
-    const teamMembers = (env.TEAM_MEMBERS || '').split(',').map(e => e.trim()).filter(Boolean);
+    const teamMembers = (env.TEAM_GUESTS || '').split(',').map(e => e.trim()).filter(Boolean);
     const users = await Promise.all(teamMembers.map(email => getUser(email, data.bearer)));
     const validUsers = users.filter(Boolean).map(u => ({ id: u.id }));
     let count = 0;
