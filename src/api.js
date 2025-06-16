@@ -275,7 +275,11 @@ const createTeam = async (data, env) => {
     // 5.  Now create the admin tag
     await createAdminTag(id, owners.map(o => o.id), data.bearer);
     // 6. Post a welcome message
-    // 7. Log event to
+
+    // 7.  log team creation event
+    await logEvent({
+      text: `👤 *${data.body.createdBy}* created team *${name}* — ${count} guests added`
+    }, env);
     return {
       name,
       description,
