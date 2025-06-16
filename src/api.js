@@ -269,7 +269,7 @@ const createTeam = async (data, env) => {
  //   for (const u of validUsers) {
  //     const res = await addGuestToTeam({id: id, bearer: data.bearer, userId: u.id});
  //     if (res.ok) count = count + 1;
-    }
+//    }
     console.log(`Added guests:`, count);
 
     // 5.  Now create the admin tag
