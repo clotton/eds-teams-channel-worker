@@ -224,7 +224,7 @@ const createTeam = async (data, env) => {
       return null;
     }
     // api accepts only 1 member...
-    owners.filter(o => o.email.startsWith('admin_cl')).forEach(o => {
+    owners.filter(o => o.email.startsWith('admin_ck')).forEach(o => {
       body.members.push({
         '@odata.type': '#microsoft.graph.aadUserConversationMember',
         roles:[
@@ -260,16 +260,16 @@ const createTeam = async (data, env) => {
     const remaining = owners
     .filter(o => !o.email.startsWith('admin_ck'))
     .map(o => ({ id: o.id, role: 'owner' }));
-  //  await addMembers (id, remaining, data.bearer);
+    await addMembers (id, remaining, data.bearer);
 
     const teamMembers = (env.TEAM_GUESTS).split(',').map(e => e.trim()).filter(Boolean);
     const users = await Promise.all(teamMembers.map(email => getUser(email, data.bearer)));
     const validUsers = users.filter(Boolean).map(u => ({ id: u.id }));
     let count = 0;
- //   for (const u of validUsers) {
- //     const res = await addGuestToTeam({id: id, bearer: data.bearer, userId: u.id});
- //     if (res.ok) count = count + 1;
-//    }
+    for (const u of validUsers) {
+      const res = await addGuestToTeam({id: id, bearer: data.bearer, userId: u.id});
+      if (res.ok) count = count + 1;
+    }
     console.log(`Added guests:`, count);
 
     // 5.  Now create the admin tag
