@@ -271,7 +271,9 @@ const createTeam = async (data, env) => {
       if (res.ok) count = count + 1;
     }
     console.log(`Added guests:`, count);
-    // 5. Create Admin Tag
+
+    // 5.  Now create the admin tag
+    await createAdminTag(id, owners.map(o => o.id), data.bearer);
     // 6. Post a welcome message
     // 7. Log event to
     return {
@@ -692,6 +694,39 @@ async function fetchWithRetry(url, options = {}, retries = 4, delay = 5000, time
 
       throw new Error(`Failed after ${retries} retries: ${err.message}`);
     }
+  }
+}
+
+async function createAdminTag(teamId, userIds, token) {
+  const url = `https://graph.microsoft.com/v1.0/teams/${teamId}/tags`;
+
+  const body = {
+    displayName: "admin",
+    members: userIds.map(userId => ({ userId }))
+  };
+
+  try {
+    const res = await fetch(url, {
+      method: "POST",
+      headers: {
+        "Authorization": `Bearer ${token}`,
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify(body)
+    });
+
+    if (!res.ok) {
+      const errorText = await res.text();
+      console.error(`Failed to create admin tag: ${res.status} - ${errorText}`);
+      return null;
+    }
+
+    const data = await res.json();
+    console.log("Admin tag created:", data);
+    return data;
+  } catch (err) {
+    console.error("Error creating admin tag:", err);
+    return null;
   }
 }
 
