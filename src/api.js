@@ -199,7 +199,7 @@ const renameChannel = async (teamId, channelId, bearer) => {
 };
 
 const createTeam = async (data, env) => {
-  const { name, description = '' } = data.body;
+  const { createdBy, name, description = '' } = data.body;
 
   if (name) {
     console.log('Creating team', name, description);
