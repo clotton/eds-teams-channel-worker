@@ -387,6 +387,7 @@ const getAllTeams = async (data) => {
       id: o.id,
       displayName: o.displayName,
       description: o.description,
+      createdDateTime: o.createdDateTime
     }));
   }
 
