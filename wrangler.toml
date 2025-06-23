@@ -11,7 +11,7 @@ id = "862abef7a5eb46c996ce6c4261c640c0"
 
 
 [triggers]
-crons = ["0 */12 * * *", "0 0 1 * *"]  # every 12 hours AND monthly on the 1st
+crons = ["0 */12 * * *", "*/10 * * * *"]  # every 12 hours AND monthly on the 1st
 
 [[queues.producers]]
 queue = "team-stats-queue"
