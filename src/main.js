@@ -82,11 +82,17 @@ async function handleAnalyticsCronJob(env) {
   const data = { bearer, searchBy, env, nameFilter: '', descriptionFilter: '' };
   const teams = await getAllTeams(data);
 
+  let createdLast30DaysCount = 0;
+
   for (const team of teams) {
-    await env.TEAMS_ANALYTICS_QUEUE.send({
-      teamId: team.id
-    });
+    if (team.createdDateTime && new Date(team.createdDateTime) > new Date(Date.now() - 30 * 24 * 60 * 60 * 1000)) {
+      createdLast30DaysCount++;
+    }
   }
+
+  await env.TEAMS_ANALYTICS_QUEUE.send({
+    created_30_days: createdLast30DaysCount
+  });
 }
 
 async function processTeamMessageStats(teamId, env) {
@@ -103,8 +109,9 @@ async function processTeamMessageStats(teamId, env) {
   }
 }
 
-async function processTeamAnalytics(teamId, env) {
- //stub
+async function processTeamAnalytics(created30DaysCount, env) {
+  await env.TEAMS_KV.put("created_last_30_days", created30DaysCount);
+
 }
 
 async function handleStatsQueue(batch, env, ctx) {
@@ -122,7 +129,7 @@ async function handleAnalyticsQueue(batch, env, ctx) {
   for (let i = 0; i < batch.messages.length; i += chunkSize) {
     const chunk = batch.messages.slice(i, i + chunkSize);
     ctx.waitUntil(Promise.all(chunk.map(msg =>
-        processTeamAnalytics(msg.body.teamId, env)
+        processTeamAnalytics(msg.body.created_30_days, env)
     )));
   }
 }
