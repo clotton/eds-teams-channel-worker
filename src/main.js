@@ -61,9 +61,9 @@ async function getGraphToken(env) {
   return json.access_token;
 }
 
-async function handleCronJob(env) {
+async function handleMessageStatsCronJob(env) {
   const bearer = await getGraphToken(env);
-  const searchBy = "Cron Job";
+  const searchBy = "Message Stats Cron Job";
 
   const data = { bearer, searchBy, env, nameFilter: '', descriptionFilter: '' };
   const teams = await getAllTeams(data);
@@ -75,7 +75,21 @@ async function handleCronJob(env) {
   }
 }
 
-async function processTeamStats(teamId, env) {
+async function handleMonthlyAnalyticsCronJob(env) {
+  const bearer = await getGraphToken(env);
+  const searchBy = "Monthly Analytics Cron Job";
+
+  const data = { bearer, searchBy, env, nameFilter: '', descriptionFilter: '' };
+  const teams = await getAllTeams(data);
+
+  for (const team of teams) {
+    await env.TEAM_STATS_QUEUE.send({
+      teamId: team.id
+    });
+  }
+}
+
+async function processTeamMessageStats(teamId, env) {
   const bearer = await getGraphToken(env);
   const stats = await getTeamMessageStats(teamId, bearer);
   if (!stats) return;
@@ -91,7 +105,11 @@ async function processTeamStats(teamId, env) {
 
 export default {
   async scheduled(event, env, ctx) {
-    ctx.waitUntil(handleCronJob(env));
+    if (event.cron === "0 */12 * * *") {
+      ctx.waitUntil(handleMessageStatsCronJob(env));
+    } else if (event.cron === "0 0 1 * *") {
+      ctx.waitUntil(handleMonthlyAnalyticsCronJob(env));
+    }
   },
 
   async queue(batch, env, ctx) {
@@ -99,7 +117,7 @@ export default {
     for (let i = 0; i < batch.messages.length; i += chunkSize) {
       const chunk = batch.messages.slice(i, i + chunkSize);
       ctx.waitUntil(Promise.all(chunk.map(msg =>
-          processTeamStats(msg.body.teamId, env)
+          processTeamMessageStats(msg.body.teamId, env)
       )));
     }
   },
