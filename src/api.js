@@ -127,12 +127,22 @@ const updateTeamPhoto = async (data) => {
   }
 };
 
-const addMembers = async (teamId, members, bearer) => {
-  const headers = {
-    Authorization: `Bearer ${bearer}`,
-    'Content-Type': 'application/json',
-  };
+const updateRole = async (teamId, memberId, role, bearer) => {
+  const url = `https://graph.microsoft.com/v1.0/teams/${teamId}/members/${memberId}`;
 
+  const res = await fetch(url, {
+    method: 'PATCH',
+    headers: {
+      Authorization: `Bearer ${bearer}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({ roles: [role] }),
+  });
+
+ console.log('Role updated ', res.status, res.statusText);
+};
+
+const addMembers = async (teamId, members, bearer) => {
   const url = `https://graph.microsoft.com/v1.0/teams/${teamId}/members/add`;
   const body = {
     values:[]
@@ -150,7 +160,10 @@ const addMembers = async (teamId, members, bearer) => {
 
   const res = await fetch(url, {
     method: 'POST',
-    headers,
+    headers: {
+      Authorization: `Bearer ${bearer}`,
+      'Content-Type': 'application/json',
+    },
     body: JSON.stringify(body),
   });
 
@@ -234,13 +247,13 @@ const createTeam = async (data, env) => {
       });
     });
 
-    // 1. Create team with initial owner
+    // 1. create team with initial owner
     const res = await fetch(url, { method: 'POST', headers, body: JSON.stringify(body) });
     if (!res.ok) throw new Error('Failed to create team');
     const location = res.headers.get('location');
     const id = location.split("'")[1];
 
-    // 2. Wait for team to be ready (polling)
+    // 2. wait for team to be ready (polling)
     let ready = false, retries = 10;
     while (!ready && retries-- > 0) {
       await new Promise(r => setTimeout(r, 2000));
@@ -250,36 +263,44 @@ const createTeam = async (data, env) => {
     if (!ready) throw new Error('Team provisioning timeout');
     console.log('Team created', id);
 
-    // 3. Update photo and rename channel
+    // 3. update photo and rename channel
     await updateTeamPhoto({ bearer: data.bearer, body: { id } });
     const channels = await getChannels(id, data.bearer);
     const targetChannel = channels?.find(c => c.displayName?.toLowerCase() === 'general');
     if (targetChannel) await renameChannel(id, targetChannel.id, data.bearer);
 
-    // 4. Add all remaining owners
+    // 4. add remaining owners
     const remaining = owners
-    .filter(o => !o.email.startsWith('admin_ck'))
+    .filter(o => o.email.startsWith('admin_cl') ||  o.email.startsWith('admin_dm'))
     .map(o => ({ id: o.id, role: 'owner' }));
     await addMembers (id, remaining, data.bearer);
+    // if needed, verify and fix roles
+    const currentMembers = await getTeamMembers({ id, bearer: data.bearer });
+    for (const member of remaining) {
+      const existing = currentMembers.find(m => m.id === member.id && m.role !== 'owner');
+      if (existing) await updateRole(id, member.id, 'owner', data.bearer);
+    }
 
+    // 5. add guests
     const teamMembers = (env.TEAM_GUESTS).split(',').map(e => e.trim()).filter(Boolean);
     const users = await Promise.all(teamMembers.map(email => getUser(email, data.bearer)));
     const validUsers = users.filter(Boolean).map(u => ({ id: u.id }));
     let count = 0;
     for (const u of validUsers) {
-      const res = await addGuestToTeam({id: id, bearer: data.bearer, userId: u.id});
+      const res = await addGuestToTeam({id, bearer: data.bearer, userId: u.id});
       if (res.ok) count = count + 1;
     }
     console.log(`Added guests:`, count);
 
-    // 5.  Now create the admin tag
+    // 6.  create the admin tag
     await createAdminTag(id, owners.map(o => o.id), data.bearer);
-    // 6. Post a welcome message
+    // 7. post admin and welcome message
 
-    // 7.  log team creation event
+    // 8.  log team creation event
     await logEvent({
-      text: `👤 *${data.body.createdBy}* created team *${name}* — ${count} guests added`
+      text: `👤 *${createdBy}* created team *${name}* — ${count} guests added`
     }, env);
+
     return {
       name,
       description,
@@ -321,6 +342,7 @@ const getTeamMembers = async (data) => {
   if (json.value) {
     return json.value.map(o => {
       return {
+        id: o.id,
         email: o.email,
         displayName: o.displayName,
         role: o.roles && o.roles.length > 0 ? o.roles[0] : 'unknown',
