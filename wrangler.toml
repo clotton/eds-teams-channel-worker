@@ -16,16 +16,11 @@ crons = ["0 */12 * * *", "0 0 1 * *"]  # every 12 hours AND monthly on the 1st
 [[queues.producers]]
 queue = "team-stats-queue"
 binding = "TEAM_STATS_QUEUE"
+queue = "teams-analytics-queue"
+binding = "TEAMS_ANALYTICS_QUEUE"
 
 [[queues.consumers]]
 queue = "team-stats-queue"
 binding = "TEAM_STATS_QUEUE"
-
-[[queues.producers]]
 queue = "teams-analytics-queue"
 binding = "TEAMS_ANALYTICS_QUEUE"
-
-[[queues.consumers]]
-queue = "teams-analytics-queue"
-binding = "TEAMS_ANALYTICS_QUEUE"
-
