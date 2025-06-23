@@ -75,7 +75,7 @@ async function handleMessageStatsCronJob(env) {
   }
 }
 
-async function handleMonthlyAnalyticsCronJob(env) {
+async function handleAnalyticsCronJob(env) {
   const bearer = await getGraphToken(env);
   const searchBy = "Monthly Analytics Cron Job";
 
@@ -83,7 +83,7 @@ async function handleMonthlyAnalyticsCronJob(env) {
   const teams = await getAllTeams(data);
 
   for (const team of teams) {
-    await env.TEAM_STATS_QUEUE.send({
+    await env.TEAMS_ANALYTICS_QUEUE.send({
       teamId: team.id
     });
   }
@@ -103,23 +103,45 @@ async function processTeamMessageStats(teamId, env) {
   }
 }
 
+async function processTeamAnalytics(teamId, env) {
+ //stub
+}
+
+async function handleStatsQueue(batch, env, ctx) {
+  const chunkSize = 1;
+  for (let i = 0; i < batch.messages.length; i += chunkSize) {
+    const chunk = batch.messages.slice(i, i + chunkSize);
+    ctx.waitUntil(Promise.all(chunk.map(msg =>
+        processTeamMessageStats(msg.body.teamId, env)
+    )));
+  }
+}
+
+async function handleAnalyticsQueue(batch, env, ctx) {
+  const chunkSize = 1;
+  for (let i = 0; i < batch.messages.length; i += chunkSize) {
+    const chunk = batch.messages.slice(i, i + chunkSize);
+    ctx.waitUntil(Promise.all(chunk.map(msg =>
+        processTeamAnalytics(msg.body.teamId, env)
+    )));
+  }
+}
+
 export default {
   async scheduled(event, env, ctx) {
     if (event.cron === "0 */12 * * *") {
       ctx.waitUntil(handleMessageStatsCronJob(env));
     } else if (event.cron === "0 0 1 * *") {
-      ctx.waitUntil(handleMonthlyAnalyticsCronJob(env));
+      ctx.waitUntil(handleAnalyticsCronJob(env));
     }
   },
 
-  async queue(batch, env, ctx) {
-    const chunkSize = 1;
-    for (let i = 0; i < batch.messages.length; i += chunkSize) {
-      const chunk = batch.messages.slice(i, i + chunkSize);
-      ctx.waitUntil(Promise.all(chunk.map(msg =>
-          processTeamMessageStats(msg.body.teamId, env)
-      )));
-    }
+  async queueTEAM_STATS_QUEUE(batch, env, ctx) {
+    await handleStatsQueue(batch, env, ctx);
+  },
+
+  async queueTEAMS_ANALYTICS_QUEUE(batch, env, ctx) {
+    await handleAnalyticsQueue(batch, env, ctx);
   },
 
   async fetch(request, env) {
