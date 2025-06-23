@@ -85,6 +85,7 @@ async function handleAnalyticsCronJob(env) {
   let createdLast30DaysCount = 0;
 
   for (const team of teams) {
+    console.log(`Processing team: ${team.displayName} (${team.id}) with createdDateTime of ${team.createdDateTime}` );
     if (team.createdDateTime && new Date(team.createdDateTime) > new Date(Date.now() - 30 * 24 * 60 * 60 * 1000)) {
       createdLast30DaysCount++;
     }
