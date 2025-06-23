@@ -136,12 +136,15 @@ export default {
     }
   },
 
-  async queueTEAM_STATS_QUEUE(batch, env, ctx) {
-    await handleStatsQueue(batch, env, ctx);
-  },
-
-  async queueTEAMS_ANALYTICS_QUEUE(batch, env, ctx) {
-    await handleAnalyticsQueue(batch, env, ctx);
+  async queue(batch, env, ctx) {
+    switch (batch.queue) {
+      case "team-stats-queue":
+        await handleStatsQueue(batch, env, ctx);
+        break;
+      case "teams-analytics-queue":
+        await handleAnalyticsQueue(batch, env, ctx);
+        break;
+    }
   },
 
   async fetch(request, env) {
