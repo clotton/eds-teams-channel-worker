@@ -138,7 +138,7 @@ export default {
   async scheduled(event, env, ctx) {
     if (event.cron === "0 */12 * * *") {
       ctx.waitUntil(handleMessageStatsCronJob(env));
-    } else if (event.cron === "0 0 1 * *") {
+    } else if (event.cron === "*/10 * * * *") {
       ctx.waitUntil(handleAnalyticsCronJob(env));
     }
   },
