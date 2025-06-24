@@ -76,8 +76,8 @@ async function handleMessageStatsCronJob(env) {
 }
 
 async function handleAnalyticsCronJob(env) {
-  env.TEAMS_KV.put("created_last_30_days", 0);
-  env.TEAMS_KV.put("questions_last_30_days", 0);
+  await env.TEAMS_KV.put("created_last_30_days", 0);
+  await env.TEAMS_KV.put("questions_last_30_days", 0);
 
   const bearer = await getGraphToken(env);
   const searchBy = "Monthly Analytics Cron Job";
