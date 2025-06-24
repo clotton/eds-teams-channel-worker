@@ -80,7 +80,7 @@ async function handleAnalyticsCronJob(env) {
   const bearer = await getGraphToken(env);
   const searchBy = "Monthly Analytics Cron Job";
 
-  const data = { bearer, searchBy, env, nameFilter: '', descriptionFilter: '' };
+  const data = { bearer, searchBy, env, nameFilter: 'aem-', descriptionFilter: '' };
   const teams = await getAllTeams(data);
 
   let createdLast30DaysCount = 0;
