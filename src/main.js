@@ -128,7 +128,7 @@ async function processTeamAnalytics(teamId, env) {
 
   const delayMs = 1000 + Math.random() * 1000; // between 1000ms and 2000ms
   await new Promise(resolve => setTimeout(resolve, delayMs));
-  await incrementKV(env, "questions_last_30_days", stats.questionCount);
+  await incrementKV(env, "total_questions", stats.questionCount);
 }
 
 async function handleStatsQueue(batch, env, ctx) {
@@ -155,7 +155,7 @@ export default {
   async scheduled(event, env, ctx) {
     if (event.cron === "0 */12 * * *") {
       ctx.waitUntil(handleMessageStatsCronJob(env));
-    } else if (event.cron === "*/10 * * * *") {
+    } else if (event.cron === "0 * * * *") {
       ctx.waitUntil(handleAnalyticsCronJob(env));
     }
   },
