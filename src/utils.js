@@ -9,3 +9,8 @@ export function isQuestion(text) {
     // Or contains question words near start (optional)
     return questionWords.some(word => lower.startsWith(word + ' '));
 }
+
+export function stripHtml(html) {
+    return html?.replace(/<[^>]+>/g, '').replace(/\s+/g, ' ').trim();
+}
+

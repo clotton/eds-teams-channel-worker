@@ -1,5 +1,5 @@
 import logo from './logo.js';
-import {isQuestion} from "./utils";
+import { isQuestion, stripHtml } from "./utils";
 
 export async function logEvent(message, env) {
   const webhookUrl = env.SLACK_WEBHOOK_URL;
@@ -465,7 +465,9 @@ async function getTeamMessageStats(teamId, bearer) {
       if (!latest || ts > latest) latest = ts;
       if (ts >= cutoffDate) recentCount++;
 
-      if (isQuestion(msg.body?.content)) {
+      const plainText = stripHtml(msg.body?.content);
+
+      if (isQuestion(plainText)) {
         questionCount++;
       }
     }
@@ -537,7 +539,9 @@ async function fetchRepliesAndCount(messageId, headers, teamId, channelId, cutof
         if (!latestReply || ts > latestReply) latestReply = ts;
         if (ts >= cutoffDate) recentReplyCount++;
 
-        if (isQuestion(reply.body?.content)) {
+        const plainText = stripHtml(reply.body?.content);
+
+        if (isQuestion(plainText)) {
             replyQuestionCount++;
         }
       }
