@@ -492,6 +492,72 @@ async function getTeamMessageStats(teamId, bearer) {
   };
 }
 
+export async function getMessagesLast30Days(teamId, bearer) {
+  const headers = { Authorization: `Bearer ${bearer}` };
+  const cutoffDate = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000); // 30 days ago
+
+  const channelsRes = await fetch(`https://graph.microsoft.com/v1.0/teams/${teamId}/channels`, { headers });
+  if (!channelsRes.ok) return { messages: [], partial: true };
+
+  const channels = (await channelsRes.json()).value || [];
+  const targetChannel = channels.find(c => ['main', 'general'].includes(c.displayName?.toLowerCase()));
+  if (!targetChannel) return { messages: [] };
+
+  let url = `https://graph.microsoft.com/v1.0/teams/${teamId}/channels/${targetChannel.id}/messages`;
+  const allMessages = [];
+
+  // Fetch all top-level messages
+  while (url) {
+    const res = await fetchWithRetry(url, { headers });
+    if (!res.ok) break;
+
+    const data = await res.json();
+    allMessages.push(...(data.value || []));
+    url = data['@odata.nextLink'] || null;
+  }
+
+  // Fetch all replies for each message
+  const replyFetches = allMessages.map(msg =>
+      fetchReplies(msg.id, headers, teamId, targetChannel.id)
+  );
+
+  const replyResults = await processInChunks(replyFetches, 5);
+
+  const allReplies = [];
+  for (const result of replyResults) {
+    if (result.status === 'fulfilled' && result.value) {
+      allReplies.push(...result.value);
+    }
+  }
+
+  // Combine messages and replies
+  const combinedMessages = [...allMessages, ...allReplies];
+
+  // Filter messages to only those within the last 30 days
+  const recentMessages = combinedMessages.filter(msg => {
+    const ts = new Date(msg.lastModifiedDateTime || msg.createdDateTime);
+    return ts >= cutoffDate;
+  });
+
+  return { messages: recentMessages };
+}
+
+async function fetchReplies(messageId, headers, teamId, channelId) {
+  let url = `https://graph.microsoft.com/v1.0/teams/${teamId}/channels/${channelId}/messages/${messageId}/replies`;
+  const replies = [];
+
+  while (url) {
+    const res = await fetchWithRetry(url, { headers });
+    if (!res.ok) break;
+
+    const data = await res.json();
+    replies.push(...(data.value || []));
+    url = data['@odata.nextLink'] || null;
+  }
+
+  return replies;
+}
+
 async function fetchRepliesAndCount(messageId, headers, teamId, channelId, cutoffDate) {
   let replyCount = 0;
   let recentReplyCount = 0;

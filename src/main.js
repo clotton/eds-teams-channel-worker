@@ -9,10 +9,11 @@ import {
   getUserTeams,
   inviteUser,
   handleMessageStatsRequest,
-  getTeamMessageStats
+  getTeamMessageStats, getMessagesLast30Days
 } from "./api";
 
 import { requireTurnstileHeader } from "./authentication";
+import { isQuestion } from "./utils";
 
 
 const options = async (request, env) => {
@@ -83,6 +84,7 @@ async function handleAnalyticsCronJob(env) {
   const teams = await getAllTeams(data);
 
   let createdLast30DaysCount = 0;
+  let questionsLast30DaysCount = 0;
 
   for (const team of teams) {
     const teamStats = await getTeamById({ id: team.id, bearer });
@@ -90,10 +92,19 @@ async function handleAnalyticsCronJob(env) {
     if (teamStats.createdDateTime && new Date(teamStats.createdDateTime) > new Date(Date.now() - 30 * 24 * 60 * 60 * 1000)) {
       createdLast30DaysCount++;
     }
+
+    const teamMessage30Days = await getMessagesLast30Days(team.id, bearer);
+    // Then to count questions:
+    const allMessages = teamMessage30Days.messages || [];
+    const questionMessages = allMessages.filter(msg => isQuestion(msg.body?.content));
+    const questionCount = questionMessages.length;
+
+    questionsLast30DaysCount += questionCount;
   }
 
   await env.TEAMS_ANALYTICS_QUEUE.send({
-    created_30_days: createdLast30DaysCount
+    created_30_days: createdLast30DaysCount,
+    questions_30_days: questionsLast30DaysCount
   });
 }
 
@@ -111,8 +122,9 @@ async function processTeamMessageStats(teamId, env) {
   }
 }
 
-async function processTeamAnalytics(created30DaysCount, env) {
-  await env.TEAMS_KV.put("created_last_30_days", created30DaysCount);
+async function processTeamAnalytics(data, env) {
+  await env.TEAMS_KV.put("created_last_30_days", data.created_30_days.toString());
+  await env.TEAMS_KV.put("questions_last_30_days", data.questions_30_days.toString());
 
 }
 
@@ -131,7 +143,7 @@ async function handleAnalyticsQueue(batch, env, ctx) {
   for (let i = 0; i < batch.messages.length; i += chunkSize) {
     const chunk = batch.messages.slice(i, i + chunkSize);
     ctx.waitUntil(Promise.all(chunk.map(msg =>
-        processTeamAnalytics(msg.body.created_30_days, env)
+        processTeamAnalytics(msg.body, env)
     )));
   }
 }
