@@ -115,11 +115,11 @@ async function incrementKV(env, key, amount) {
 }
 
 async function processTeamAnalytics(teamId, env) {
+  const bearer = await getGraphToken(env);
 
   const teamStats = await getTeamById({ id: teamId, bearer });
   if (teamStats.createdDateTime && new Date(teamStats.createdDateTime) > new Date(Date.now() - 30 * 24 * 60 * 60 * 1000)) {
     await incrementKV(env, "created_last_30_days", 1);
-
   }
 
   const teamMessages30Days = await getMessagesLast30Days(teamId, bearer);
