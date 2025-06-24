@@ -119,6 +119,8 @@ async function processTeamAnalytics(teamId, env) {
 
   const teamStats = await getTeamById({ id: teamId, bearer });
   if (teamStats.createdDateTime && new Date(teamStats.createdDateTime) > new Date(Date.now() - 30 * 24 * 60 * 60 * 1000)) {
+    const delayMs = 1000 + Math.random() * 1000; // between 1000ms and 2000ms
+    await new Promise(resolve => setTimeout(resolve, delayMs));
     await incrementKV(env, "created_last_30_days", 1);
   }
 
@@ -128,6 +130,8 @@ async function processTeamAnalytics(teamId, env) {
   const questionMessages = allMessages.filter(msg => isQuestion(msg.body?.content));
   const questionCount = questionMessages.length;
 
+  const delayMs = 1000 + Math.random() * 1000; // between 1000ms and 2000ms
+  await new Promise(resolve => setTimeout(resolve, delayMs));
   await incrementKV(env, "questions_last_30_days", questionCount);
 }
 
