@@ -271,7 +271,7 @@ const createTeam = async (data, env) => {
 
     // 4. add remaining owners
     const remaining = owners
-    .filter(o => o.email.startsWith('admin_cl') ||  o.email.startsWith('admin_dm'))
+    .filter(o => !o.email.startsWith('admin_ck'))
     .map(o => ({ id: o.id, role: 'owner' }));
     await addMembers (id, remaining, data.bearer);
     // if needed, verify and fix roles
