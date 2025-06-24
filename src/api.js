@@ -1,4 +1,5 @@
 import logo from './logo.js';
+import {isQuestion} from "./utils";
 
 export async function logEvent(message, env) {
   const webhookUrl = env.SLACK_WEBHOOK_URL;
@@ -438,6 +439,7 @@ async function getTeamMessageStats(teamId, bearer) {
   if (!targetChannel) return { messageCount: 0, latestMessage: null, recentCount: 0 };
 
   let count = 0;
+  let questionCount = 0;
   let recentCount = 0;
   let latest = null;
   let url = `https://graph.microsoft.com/v1.0/teams/${teamId}/channels/${targetChannel.id}/messages`;
@@ -462,6 +464,10 @@ async function getTeamMessageStats(teamId, bearer) {
       const ts = new Date(msg.lastModifiedDateTime || msg.createdDateTime);
       if (!latest || ts > latest) latest = ts;
       if (ts >= cutoffDate) recentCount++;
+
+      if (isQuestion(msg.body?.content)) {
+        questionCount++;
+      }
     }
 
     // Instead of nested reply loop, create a fetcher promise
@@ -478,9 +484,10 @@ async function getTeamMessageStats(teamId, bearer) {
 
   for (const result of replyResults) {
     if (result.status === "fulfilled" && result.value) {
-      const { replyCount, recentReplyCount, latestReply } = result.value;
+      const { replyCount, recentReplyCount, latestReply, replyQuestionCount } = result.value;
       count += replyCount;
       recentCount += recentReplyCount;
+      questionCount += replyQuestionCount;
       if (latestReply && (!latest || latestReply > latest)) latest = latestReply;
     }
   }
@@ -489,57 +496,8 @@ async function getTeamMessageStats(teamId, bearer) {
     messageCount: count,
     latestMessage: latest ? latest.toISOString().split('T')[0] : null,
     recentCount,
+    questionCount,
   };
-}
-
-export async function getMessagesLast30Days(teamId, bearer) {
-  const headers = { Authorization: `Bearer ${bearer}` };
-  const cutoffDate = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000); // 30 days ago
-
-  const channelsRes = await fetch(`https://graph.microsoft.com/v1.0/teams/${teamId}/channels`, { headers });
-  if (!channelsRes.ok) return { messages: [], partial: true };
-
-  const channels = (await channelsRes.json()).value || [];
-  const targetChannel = channels.find(c => ['main', 'general'].includes(c.displayName?.toLowerCase()));
-  if (!targetChannel) return { messages: [] };
-
-  let url = `https://graph.microsoft.com/v1.0/teams/${teamId}/channels/${targetChannel.id}/messages`;
-  const allMessages = [];
-
-  // Fetch all top-level messages
-  while (url) {
-    const res = await fetchWithRetry(url, { headers });
-    if (!res.ok) break;
-
-    const data = await res.json();
-    allMessages.push(...(data.value || []));
-    url = data['@odata.nextLink'] || null;
-  }
-
-  // Fetch all replies for each message
-  const replyFetches = allMessages.map(msg =>
-      fetchReplies(msg.id, headers, teamId, targetChannel.id)
-  );
-
-  const replyResults = await processInChunks(replyFetches, 5);
-
-  const allReplies = [];
-  for (const result of replyResults) {
-    if (result.status === 'fulfilled' && result.value) {
-      allReplies.push(...result.value);
-    }
-  }
-
-  // Combine messages and replies
-  const combinedMessages = [...allMessages, ...allReplies];
-
-  // Filter messages to only those within the last 30 days
-  const recentMessages = combinedMessages.filter(msg => {
-    const ts = new Date(msg.lastModifiedDateTime || msg.createdDateTime);
-    return ts >= cutoffDate;
-  });
-
-  return { messages: recentMessages };
 }
 
 async function fetchReplies(messageId, headers, teamId, channelId) {
@@ -561,6 +519,7 @@ async function fetchReplies(messageId, headers, teamId, channelId) {
 async function fetchRepliesAndCount(messageId, headers, teamId, channelId, cutoffDate) {
   let replyCount = 0;
   let recentReplyCount = 0;
+  let replyQuestionCount = 0;
   let latestReply = null;
   let url = `https://graph.microsoft.com/v1.0/teams/${teamId}/channels/${channelId}/messages/${messageId}/replies`;
 
@@ -577,6 +536,10 @@ async function fetchRepliesAndCount(messageId, headers, teamId, channelId, cutof
         const ts = new Date(reply.lastModifiedDateTime || reply.createdDateTime);
         if (!latestReply || ts > latestReply) latestReply = ts;
         if (ts >= cutoffDate) recentReplyCount++;
+
+        if (isQuestion(reply.body?.content)) {
+            replyQuestionCount++;
+        }
       }
     }
     url = data['@odata.nextLink'] || null;
@@ -584,7 +547,7 @@ async function fetchRepliesAndCount(messageId, headers, teamId, channelId, cutof
 
   }
 
-  return { replyCount, recentReplyCount, latestReply };
+  return { replyCount, recentReplyCount, latestReply, replyQuestionCount };
 }
 
 async function inviteUser(data) {

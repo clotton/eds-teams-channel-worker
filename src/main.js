@@ -9,11 +9,10 @@ import {
   getUserTeams,
   inviteUser,
   handleMessageStatsRequest,
-  getTeamMessageStats, getMessagesLast30Days
+  getTeamMessageStats
 } from "./api";
 
 import { requireTurnstileHeader } from "./authentication";
-import { isQuestion } from "./utils";
 
 
 const options = async (request, env) => {
@@ -124,15 +123,12 @@ async function processTeamAnalytics(teamId, env) {
     await incrementKV(env, "created_last_30_days", 1);
   }
 
-  const teamMessages30Days = await getMessagesLast30Days(teamId, bearer);
-  // Then to count questions:
-  const allMessages = teamMessages30Days.messages || [];
-  const questionMessages = allMessages.filter(msg => isQuestion(msg.body?.content));
-  const questionCount = questionMessages.length;
+  const stats = await getTeamMessageStats(teamId, bearer);
+  if (!stats) return;
 
   const delayMs = 1000 + Math.random() * 1000; // between 1000ms and 2000ms
   await new Promise(resolve => setTimeout(resolve, delayMs));
-  await incrementKV(env, "questions_last_30_days", questionCount);
+  await incrementKV(env, "questions_last_30_days", stats.questionCount);
 }
 
 async function handleStatsQueue(batch, env, ctx) {
