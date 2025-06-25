@@ -11,21 +11,13 @@ id = "862abef7a5eb46c996ce6c4261c640c0"
 
 
 [triggers]
-crons = ["0 */12 * * *", "0 * * * *"]  # every 12 hours AND monthly on the 1st
+cron = "0 */12 * * *"  # every 12 hours
 
 [[queues.producers]]
 queue = "team-stats-queue"
 binding = "TEAM_STATS_QUEUE"
 
-[[queues.producers]]
-queue = "teams-analytics-queue"
-binding = "TEAMS_ANALYTICS_QUEUE"
-
 
 [[queues.consumers]]
 queue = "team-stats-queue"
 binding = "TEAM_STATS_QUEUE"
-
-[[queues.consumers]]
-queue = "teams-analytics-queue"
-binding = "TEAMS_ANALYTICS_QUEUE"

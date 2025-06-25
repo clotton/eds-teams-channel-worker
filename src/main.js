@@ -61,7 +61,7 @@ async function getGraphToken(env) {
   return json.access_token;
 }
 
-async function handleMessageStatsCronJob(env) {
+async function handleStatsCronJob(env) {
   const bearer = await getGraphToken(env);
   const searchBy = "Message Stats Cron Job";
 
@@ -75,27 +75,13 @@ async function handleMessageStatsCronJob(env) {
   }
 }
 
-async function handleAnalyticsCronJob(env) {
-  await env.TEAMS_KV.put("created_last_30_days", 0);
-  await env.TEAMS_KV.put("questions_last_30_days", 0);
-
+async function processTeamStats(teamId, env) {
   const bearer = await getGraphToken(env);
-  const searchBy = "Monthly Analytics Cron Job";
-
-  const data = { bearer, searchBy, env, nameFilter: 'aem-', descriptionFilter: '' };
-  const teams = await getAllTeams(data);
-
-  for (const team of teams) {
-    await env.TEAMS_ANALYTICS_QUEUE.send({
-      teamId: team.id
-    });
-  }
-}
-
-async function processTeamMessageStats(teamId, env) {
-  const bearer = await getGraphToken(env);
-  const stats = await getTeamMessageStats(teamId, bearer);
+  const team = await getTeamById({ id: teamId, bearer });
+  let stats = await getTeamMessageStats(teamId, bearer);
   if (!stats) return;
+
+  stats.created = team.createdDateTime;
 
   const key = teamId;
   const newValue = JSON.stringify(stats);
@@ -106,69 +92,23 @@ async function processTeamMessageStats(teamId, env) {
   }
 }
 
-async function incrementKV(env, key, amount) {
-  const existing = await env.TEAMS_KV.get(key);
-  const current = parseInt(existing, 10) || 0;
-  const newValue = current + amount;
-  await env.TEAMS_KV.put(key, newValue.toString());
-}
-
-async function processTeamAnalytics(teamId, env) {
-  const bearer = await getGraphToken(env);
-
-  const teamStats = await getTeamById({ id: teamId, bearer });
-  if (teamStats.createdDateTime && new Date(teamStats.createdDateTime) > new Date(Date.now() - 30 * 24 * 60 * 60 * 1000)) {
-    const delayMs = 1000 + Math.random() * 1000; // between 1000ms and 2000ms
-    await new Promise(resolve => setTimeout(resolve, delayMs));
-    await incrementKV(env, "created_last_30_days", 1);
-  }
-
-  const stats = await getTeamMessageStats(teamId, bearer);
-  if (!stats) return;
-
-  const delayMs = 1000 + Math.random() * 1000; // between 1000ms and 2000ms
-  await new Promise(resolve => setTimeout(resolve, delayMs));
-  await incrementKV(env, "total_questions", stats.questionCount);
-}
-
 async function handleStatsQueue(batch, env, ctx) {
   const chunkSize = 1;
   for (let i = 0; i < batch.messages.length; i += chunkSize) {
     const chunk = batch.messages.slice(i, i + chunkSize);
     ctx.waitUntil(Promise.all(chunk.map(msg =>
-        processTeamMessageStats(msg.body.teamId, env)
-    )));
-  }
-}
-
-async function handleAnalyticsQueue(batch, env, ctx) {
-  const chunkSize = 1;
-  for (let i = 0; i < batch.messages.length; i += chunkSize) {
-    const chunk = batch.messages.slice(i, i + chunkSize);
-    ctx.waitUntil(Promise.all(chunk.map(msg =>
-        processTeamAnalytics(msg.body.teamId, env)
+        processTeamStats(msg.body.teamId, env)
     )));
   }
 }
 
 export default {
   async scheduled(event, env, ctx) {
-    if (event.cron === "0 */12 * * *") {
-      ctx.waitUntil(handleMessageStatsCronJob(env));
-    } else if (event.cron === "0 * * * *") {
-      ctx.waitUntil(handleAnalyticsCronJob(env));
-    }
+      ctx.waitUntil(handleStatsCronJob(env));
   },
 
   async queue(batch, env, ctx) {
-    switch (batch.queue) {
-      case "team-stats-queue":
-        await handleStatsQueue(batch, env, ctx);
-        break;
-      case "teams-analytics-queue":
-        await handleAnalyticsQueue(batch, env, ctx);
-        break;
-    }
+    await handleStatsQueue(batch, env, ctx);
   },
 
   async fetch(request, env) {
