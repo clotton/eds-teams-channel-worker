@@ -442,6 +442,8 @@ async function getTeamMessageStats(teamId, bearer) {
   let questionCount = 0;
   let recentCount = 0;
   let latest = null;
+  let questionResponseTimes = [];
+
   let url = `https://graph.microsoft.com/v1.0/teams/${teamId}/channels/${targetChannel.id}/messages`;
 
   const allMessages = [];
@@ -486,12 +488,30 @@ async function getTeamMessageStats(teamId, bearer) {
 
   for (const result of replyResults) {
     if (result.status === "fulfilled" && result.value) {
-      const { replyCount, recentReplyCount, latestReply, replyQuestionCount } = result.value;
+      const {
+        replyCount,
+        recentReplyCount,
+        latestReply,
+        replyQuestionCount,
+        questionResponseMs = []
+      } = result.value;
+
       count += replyCount;
       recentCount += recentReplyCount;
       questionCount += replyQuestionCount;
+      questionResponseTimes.push(...questionResponseMs);
+
       if (latestReply && (!latest || latestReply > latest)) latest = latestReply;
     }
+  }
+
+  // compute average, shortest, and longest response times
+  let avgMs = null, shortestMs = null, longestMs = null;
+  if (questionResponseTimes.length > 0) {
+    const sum = questionResponseTimes.reduce((a, b) => a + b, 0);
+    avgMs = Math.round(sum / questionResponseTimes.length);
+    shortestMs = Math.min(...questionResponseTimes);
+    longestMs = Math.max(...questionResponseTimes);
   }
 
   return {
@@ -499,23 +519,12 @@ async function getTeamMessageStats(teamId, bearer) {
     latestMessage: latest ? latest.toISOString().split('T')[0] : null,
     recentCount,
     questionCount,
+    questionResponseTime: {
+      averageMs: avgMs,
+      shortestMs,
+      longestMs
+    }
   };
-}
-
-async function fetchReplies(messageId, headers, teamId, channelId) {
-  let url = `https://graph.microsoft.com/v1.0/teams/${teamId}/channels/${channelId}/messages/${messageId}/replies`;
-  const replies = [];
-
-  while (url) {
-    const res = await fetchWithRetry(url, { headers });
-    if (!res.ok) break;
-
-    const data = await res.json();
-    replies.push(...(data.value || []));
-    url = data['@odata.nextLink'] || null;
-  }
-
-  return replies;
 }
 
 async function fetchRepliesAndCount(messageId, headers, teamId, channelId, cutoffDate) {
@@ -523,7 +532,16 @@ async function fetchRepliesAndCount(messageId, headers, teamId, channelId, cutof
   let recentReplyCount = 0;
   let replyQuestionCount = 0;
   let latestReply = null;
+  let questionResponseMs = []; // 🔧 NEW
+
   let url = `https://graph.microsoft.com/v1.0/teams/${teamId}/channels/${channelId}/messages/${messageId}/replies`;
+
+  // fetch the parent message to check if it's a question
+  const parentRes = await fetchWithRetry(`https://graph.microsoft.com/v1.0/teams/${teamId}/channels/${channelId}/messages/${messageId}`, { headers });
+  const parentJson = parentRes.ok ? await parentRes.json() : null;
+  const parentIsQuestion = parentJson ? isQuestion(stripHtml(parentJson.body?.content || '')) : false;
+  const parentCreated = parentJson ? new Date(parentJson.createdDateTime) : null;
+  const parentAuthorId = parentJson?.from?.user?.id;
 
   while (url) {
     const res = await fetchWithRetry(url, { headers });
@@ -544,6 +562,20 @@ async function fetchRepliesAndCount(messageId, headers, teamId, channelId, cutof
         if (isQuestion(plainText)) {
             replyQuestionCount++;
         }
+
+        // if parent was a question, check if this is a valid first reply
+        if (
+            parentIsQuestion &&
+            parentAuthorId &&
+            reply.from.user.id !== parentAuthorId &&
+            parentCreated &&
+            questionResponseMs.length === 0
+        ) {
+          const delta = ts - parentCreated;
+          if (delta >= 0) {
+            questionResponseMs.push(delta);
+          }
+        }
       }
     }
     url = data['@odata.nextLink'] || null;
@@ -551,7 +583,13 @@ async function fetchRepliesAndCount(messageId, headers, teamId, channelId, cutof
 
   }
 
-  return { replyCount, recentReplyCount, latestReply, replyQuestionCount };
+  return {
+    replyCount,
+    recentReplyCount,
+    latestReply,
+    replyQuestionCount,
+    questionResponseMs,
+  };
 }
 
 async function inviteUser(data) {

@@ -13,6 +13,7 @@ import {
 } from "./api";
 
 import { requireTurnstileHeader } from "./authentication";
+import { isValidReply } from "./utils";
 
 
 const options = async (request, env) => {

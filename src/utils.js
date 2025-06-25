@@ -14,3 +14,12 @@ export function stripHtml(html) {
     return html?.replace(/<[^>]+>/g, '').replace(/\s+/g, ' ').trim();
 }
 
+export function isValidReply(reply, questionAuthorId) {
+    return (
+        reply.from?.user?.id &&
+        reply.from.user.id !== questionAuthorId &&
+        reply.body?.content?.trim()
+    );
+}
+
+
