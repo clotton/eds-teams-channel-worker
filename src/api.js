@@ -370,9 +370,9 @@ const getAllTeams = async (data) => {
     headers,
   });
 
- // await logEvent({
- //     text: `👤 *${searchBy}* searched Teams for name: *${searchNameMod}* and description: *${searchDescMod}*`,
- //   }, env);
+  await logEvent({
+      text: `👤 *${searchBy}* searched Teams for name: *${searchNameMod}* and description: *${searchDescMod}*`,
+    }, env);
 
   const json = await res.json();
   if (json && json.value) {
