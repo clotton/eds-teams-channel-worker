@@ -63,17 +63,26 @@ async function getGraphToken(env) {
 }
 
 async function handleStatsCronJob(env) {
-  const bearer = await getGraphToken(env);
-  const searchBy = "Message Stats Cron Job";
+  console.log("handleStatsCronJob started");
 
-  const data = { bearer, searchBy, env, nameFilter: '', descriptionFilter: '' };
-  const teams = await getAllTeams(data);
+  try {
+    const bearer = await getGraphToken(env);
+    const searchBy = "Message Stats Cron Job";
 
-  for (const team of teams) {
-    await env.TEAM_STATS_QUEUE.send({
-      teamId: team.id
-    });
+    const data = { bearer, searchBy, env, nameFilter: '', descriptionFilter: '' };
+    const teams = await getAllTeams(data);
+
+    console.log(`Found ${teams.length} teams`);
+
+    for (const team of teams) {
+      await env.TEAM_STATS_QUEUE.send({
+        teamId: team.id
+      });
+    }
+  } catch (e) {
+    console.error("handleStatsCronJob error:", err.stack || err.message);
   }
+
 }
 
 async function processTeamStats(teamId, env) {
@@ -105,7 +114,8 @@ async function handleStatsQueue(batch, env, ctx) {
 
 export default {
   async scheduled(event, env, ctx) {
-      ctx.waitUntil(handleStatsCronJob(env));
+    console.log(`[CRON] Triggered at ${new Date().toISOString()}`);
+    ctx.waitUntil(handleStatsCronJob(env));
   },
 
   async queue(batch, env, ctx) {
