@@ -415,16 +415,39 @@ async function handleMessageStatsRequest(data, env) {
   }
 }
 
-async function processInChunks(promises, chunkSize = 5) {
+async function processInChunks(tasks, concurrency = 1, maxSubrequests = 45) {
   const results = [];
+  const executing = [];
+  let subrequestCount = 0;
 
-  for (let i = 0; i < promises.length; i += chunkSize) {
-    const chunk = promises.slice(i, i + chunkSize);
-    const settled = await Promise.allSettled(chunk);
-    results.push(...settled);
+  for (const task of tasks) {
+    const wrappedTask = async () => {
+      if (subrequestCount >= maxSubrequests) {
+        console.warn(`❌ Max subrequest count (${maxSubrequests}) reached. Skipping remaining tasks.`);
+        throw new Error("Subrequest cap hit");
+      }
+      try {
+        const result = await task();
+        subrequestCount++; // assume 1 subrequest per task; adjust if task uses more
+        return { status: "fulfilled", value: result };
+      } catch (err) {
+        return { status: "rejected", reason: err };
+      }
+    };
+
+    const p = wrappedTask();
+    results.push(p);
+
+    if (concurrency <= tasks.length) {
+      const e = p.then(() => executing.splice(executing.indexOf(e), 1));
+      executing.push(e);
+      if (executing.length >= concurrency) {
+        await Promise.race(executing);
+      }
+    }
   }
 
-  return results;
+  return Promise.all(results);
 }
 
 async function getTeamMessageStats(teamId, bearer) {
@@ -478,7 +501,7 @@ async function getTeamMessageStats(teamId, bearer) {
     replyFetches.push(fetchRepliesAndCount(msg.id, headers, teamId, targetChannel.id, cutoffDate));
   }
 
-  const replyResults = await processInChunks(replyFetches, 5);
+  const replyResults = await processInChunks(replyFetches, 1, 45);
 
   for (const result of replyResults) {
     if (result.status === 'rejected') {
