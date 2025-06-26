@@ -539,7 +539,6 @@ async function fetchRepliesAndCount(messageId, headers, teamId, channelId, cutof
   let recentReplyCount = 0;
   let replyQuestionCount = 0;
   let latestReply = null;
-  let questionResponseMs = []; // 🔧 NEW
 
   let url = `https://graph.microsoft.com/v1.0/teams/${teamId}/channels/${channelId}/messages/${messageId}/replies`;
 
