@@ -544,13 +544,6 @@ async function fetchRepliesAndCount(messageId, headers, teamId, channelId, cutof
 
   let url = `https://graph.microsoft.com/v1.0/teams/${teamId}/channels/${channelId}/messages/${messageId}/replies`;
 
-  // fetch the parent message to check if it's a question
-  const parentRes = await fetchWithRetry(`https://graph.microsoft.com/v1.0/teams/${teamId}/channels/${channelId}/messages/${messageId}`, { headers });
-  const parentJson = parentRes.ok ? await parentRes.json() : null;
-  const parentIsQuestion = parentJson ? isQuestion(stripHtml(parentJson.body?.content || '')) : false;
-  const parentCreated = parentJson ? new Date(parentJson.createdDateTime) : null;
-  const parentAuthorId = parentJson?.from?.user?.id;
-
   while (url) {
     const res = await fetchWithRetry(url, { headers });
     if (!res.ok) break;
