@@ -499,7 +499,7 @@ async function getTeamMessageStats(teamId, bearer) {
     replyFetches.push(() => fetchRepliesAndCount(msg.id, headers, teamId, targetChannel.id, cutoffDate));
   }
 
-  const replyResults = await processInChunks(replyFetches, 1, 45);
+  const replyResults = await processInChunks(replyFetches);
 
   for (const result of replyResults) {
     if (result.status === 'rejected') {
