@@ -496,8 +496,7 @@ async function getTeamMessageStats(teamId, bearer) {
       }
     }
 
-    // Instead of nested reply loop, create a fetcher promise
-    replyFetches.push(fetchRepliesAndCount(msg.id, headers, teamId, targetChannel.id, cutoffDate));
+    replyFetches.push(() => fetchRepliesAndCountSafe(msg.id, headers, teamId, targetChannel.id, cutoffDate));
   }
 
   const replyResults = await processInChunks(replyFetches, 1, 45);
