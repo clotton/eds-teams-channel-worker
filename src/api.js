@@ -465,7 +465,6 @@ async function getTeamMessageStats(teamId, bearer) {
   let questionCount = 0;
   let recentCount = 0;
   let latest = null;
-  let questionResponseTimes = [];
 
   let url = `https://graph.microsoft.com/v1.0/teams/${teamId}/channels/${targetChannel.id}/messages`;
 
@@ -522,31 +521,17 @@ async function getTeamMessageStats(teamId, bearer) {
       count += replyCount;
       recentCount += recentReplyCount;
       questionCount += replyQuestionCount;
-      questionResponseTimes.push(...questionResponseMs);
 
       if (latestReply && (!latest || latestReply > latest)) latest = latestReply;
     }
   }
 
-  // compute average, shortest, and longest response times
-  let avgMs = null, shortestMs = null, longestMs = null;
-  if (questionResponseTimes.length > 0) {
-    const sum = questionResponseTimes.reduce((a, b) => a + b, 0);
-    avgMs = Math.round(sum / questionResponseTimes.length);
-    shortestMs = Math.min(...questionResponseTimes);
-    longestMs = Math.max(...questionResponseTimes);
-  }
 
   return {
     messageCount: count,
     latestMessage: latest ? latest.toISOString().split('T')[0] : null,
     recentCount,
     questionCount,
-    questionResponseTime: {
-      averageMs: avgMs,
-      shortestMs,
-      longestMs
-    }
   };
 }
 
@@ -585,20 +570,6 @@ async function fetchRepliesAndCount(messageId, headers, teamId, channelId, cutof
         if (isQuestion(plainText)) {
             replyQuestionCount++;
         }
-
-        // if parent was a question, check if this is a valid first reply
-        if (
-            parentIsQuestion &&
-            parentAuthorId &&
-            reply.from.user.id !== parentAuthorId &&
-            parentCreated &&
-            questionResponseMs.length === 0
-        ) {
-          const delta = ts - parentCreated;
-          if (delta >= 0) {
-            questionResponseMs.push(delta);
-          }
-        }
       }
     }
     url = data['@odata.nextLink'] || null;
@@ -611,7 +582,6 @@ async function fetchRepliesAndCount(messageId, headers, teamId, channelId, cutof
     recentReplyCount,
     latestReply,
     replyQuestionCount,
-    questionResponseMs,
   };
 }
 
