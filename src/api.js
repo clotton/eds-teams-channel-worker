@@ -415,7 +415,7 @@ async function handleMessageStatsRequest(data, env) {
   }
 }
 
-async function processInChunks(tasks, concurrency = 1, maxSubrequests = 50) {
+async function processInChunks(tasks, concurrency = 1, maxSubrequests = 100) {
   const results = [];
   const executing = [];
   let subrequestCount = 0;
