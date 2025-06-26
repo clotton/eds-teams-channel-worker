@@ -515,7 +515,6 @@ async function getTeamMessageStats(teamId, bearer) {
         recentReplyCount,
         latestReply,
         replyQuestionCount,
-        questionResponseMs = []
       } = result.value;
 
       count += replyCount;
