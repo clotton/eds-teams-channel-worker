@@ -423,8 +423,7 @@ async function processInChunks(tasks, concurrency = 1, maxSubrequests = 50) {
   for (const task of tasks) {
     const wrappedTask = async () => {
       if (subrequestCount >= maxSubrequests) {
-        console.warn(`❌ Max subrequest count (${maxSubrequests}) reached. Skipping remaining tasks.`);
-        throw new Error("Subrequest cap hit");
+        throw new Error(`❌ Max subrequest count (${maxSubrequests}) reached. Skipping remaining tasks.`);
       }
       try {
         const result = await task();
