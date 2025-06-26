@@ -96,6 +96,7 @@ async function processTeamStats(teamId, env) {
   const key = teamId;
   const newValue = JSON.stringify(stats);
   const existing = await env.TEAMS_KV.get(key);
+  console.log(`Getting stats for team ${teamId} - ${team.displayName}: ${existing}`);
 
   if (existing !== newValue) {
     console.log(`Updating stats for team ${teamId} - ${team.displayName}: ${newValue}`);
