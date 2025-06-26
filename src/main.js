@@ -105,12 +105,8 @@ async function processTeamStats(teamId, env) {
 }
 
 async function handleStatsQueue(batch, env, ctx) {
-  const chunkSize = 1;
-  for (let i = 0; i < batch.messages.length; i += chunkSize) {
-    const chunk = batch.messages.slice(i, i + chunkSize);
-    ctx.waitUntil(Promise.all(chunk.map(msg =>
-        processTeamStats(msg.body.teamId, env)
-    )));
+  for (const msg of batch.messages) {
+    await processTeamStats(msg.body.teamId, env);
   }
 }
 
