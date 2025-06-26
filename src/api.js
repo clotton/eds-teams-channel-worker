@@ -496,7 +496,7 @@ async function getTeamMessageStats(teamId, bearer) {
       }
     }
 
-    replyFetches.push(() => fetchRepliesAndCountSafe(msg.id, headers, teamId, targetChannel.id, cutoffDate));
+    replyFetches.push(() => fetchRepliesAndCount(msg.id, headers, teamId, targetChannel.id, cutoffDate));
   }
 
   const replyResults = await processInChunks(replyFetches, 1, 45);
