@@ -730,7 +730,7 @@ async function removeTeamMembers(data, env) {
   return results;
 }
 
-async function fetchWithRetry(url, options = {}, retries = 4, delay = 5000, timeout = 10000) {
+async function fetchWithRetry(url, options = {}, retries = 4, delay = 5000, timeout = 20000) {
   for (let i = 0; i < retries; i++) {
     const controller = new AbortController();
     const id = setTimeout(() => controller.abort(), timeout);
@@ -744,14 +744,13 @@ async function fetchWithRetry(url, options = {}, retries = 4, delay = 5000, time
 
       const body = await res.text();
       const retryAfter = res.headers.get("Retry-After");
+      console.warn(`Retry ${i + 1}/${retries}: ${res.status} - ${body} [${url}]`);
 
-      console.warn(`Retry ${i + 1}/${retries}: ${res.status} - ${body}`);
-
-      if ([502, 503, 504, 429].includes(res.status)) {
+      if (options.retry !== false && [502, 503, 504, 429].includes(res.status)) {
         const baseDelay = retryAfter ? parseInt(retryAfter) * 1000 : delay;
-        const jitter = Math.floor(Math.random() * 1000); // up to 1s of jitter
+        const jitter = Math.floor(Math.random() * 1000);
         await new Promise(r => setTimeout(r, baseDelay + jitter));
-        delay *= 2;
+        delay = Math.min(delay * 2, 20000);
         continue;
       }
 
@@ -760,15 +759,15 @@ async function fetchWithRetry(url, options = {}, retries = 4, delay = 5000, time
       clearTimeout(id);
 
       if (err.name === "AbortError") {
-        console.warn(`Timeout on attempt ${i + 1} (${timeout}ms)`);
+        console.warn(`Timeout on attempt ${i + 1} (${timeout}ms) for ${url}`);
       } else {
-        console.warn(`Fetch error on attempt ${i + 1}:`, err.message);
+        console.warn(`Fetch error on attempt ${i + 1} for ${url}: ${err.message}`);
       }
 
       if (i < retries - 1) {
         const jitter = Math.floor(Math.random() * 1000);
         await new Promise(r => setTimeout(r, delay + jitter));
-        delay *= 2;
+        delay = Math.min(delay * 2, 20000);
         continue;
       }
 
