@@ -415,7 +415,7 @@ async function handleMessageStatsRequest(data, env) {
   }
 }
 
-async function processInChunks(tasks, concurrency = 1, maxSubrequests = 100) {
+async function processInChunks(teamId, tasks, concurrency = 1, maxSubrequests = 100) {
   const results = [];
   const executing = [];
   let subrequestCount = 0;
@@ -423,7 +423,7 @@ async function processInChunks(tasks, concurrency = 1, maxSubrequests = 100) {
   for (const task of tasks) {
     const wrappedTask = async () => {
       if (subrequestCount >= maxSubrequests) {
-        throw new Error(`❌ Max subrequest count (${maxSubrequests}) reached. Skipping remaining tasks.`);
+        throw new Error(`❌ Max subrequest count (${maxSubrequests}) reached for ${teamId}. Skipping remaining tasks.`);
       }
       try {
         const result = await task();
@@ -497,8 +497,7 @@ async function getTeamMessageStats(teamId, bearer) {
 
     replyFetches.push(() => fetchRepliesAndCount(msg.id, headers, teamId, targetChannel.id, cutoffDate));
   }
-
-  const replyResults = await processInChunks(replyFetches);
+  const replyResults = await processInChunks(teamId, replyFetches);
 
   for (const result of replyResults) {
     if (result.status === 'rejected') {
