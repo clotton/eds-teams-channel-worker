@@ -87,11 +87,8 @@ async function handleStatsCronJob(env) {
 
 async function processTeamStats(teamId, env) {
   const bearer = await getGraphToken(env);
-  const team = await getTeamById({ id: teamId, bearer });
   let stats = await getTeamMessageStats(teamId, bearer);
   if (!stats) return;
-
-  stats.created = team.createdDateTime;
 
   const key = teamId;
   const newValue = JSON.stringify(stats);
