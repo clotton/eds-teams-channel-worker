@@ -75,6 +75,7 @@ async function handleStatsCronJob(env) {
     console.log(`Found ${teams.length} teams`);
 
     for (const team of teams) {
+      console.log(`Adding team ${team.displayName} (${team.id}) to stats queue`);
       await env.TEAM_STATS_QUEUE.send({
         teamId: team.id
       });
@@ -93,10 +94,10 @@ async function processTeamStats(teamId, env) {
   const key = teamId;
   const newValue = JSON.stringify(stats);
   const existing = await env.TEAMS_KV.get(key);
-  console.log(`Getting stats for team ${teamId} - ${team.displayName}: ${existing}`);
+  console.log(`Getting stats for team ${teamId}: ${existing}`);
 
   if (existing !== newValue) {
-    console.log(`Updating stats for team ${teamId} - ${team.displayName}: ${newValue}`);
+    console.log(`Updating stats for team ${teamId}: ${newValue}`);
     await env.TEAMS_KV.put(key, newValue);
   }
 }
