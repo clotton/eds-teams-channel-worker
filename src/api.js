@@ -355,43 +355,60 @@ const getTeamMembers = async (data) => {
 }
 
 const getAllTeams = async (data) => {
-  const { searchBy, nameFilter, descriptionFilter, env, bearer } = data;
-  const searchNameMod = nameFilter ?? '*';
-  const searchDescMod = descriptionFilter ?? '*';
+  const { searchBy, nameFilter = '*', descriptionFilter = '*', env, bearer } = data;
 
   const headers = {
     Authorization: `Bearer ${bearer}`,
   };
 
-  const url = `https://graph.microsoft.com/v1.0/teams`;
+  let url = `https://graph.microsoft.com/v1.0/teams?$top=100`;
+  const results = [];
 
-  const res = await fetch(url, {
-    method: 'GET',
-    headers,
-  });
+  const nameFilterLower = nameFilter.toLowerCase();
+  const descFilterLower = descriptionFilter.toLowerCase();
 
+  // Log the search event
   await logEvent({
-      text: `👤 *${searchBy}* searched Teams for name: *${searchNameMod}* and description: *${searchDescMod}*`,
-    }, env);
+    text: `👤 *${searchBy}* searched Teams for name: *${nameFilter}* and description: *${descriptionFilter}*`,
+  }, env);
 
-  const json = await res.json();
-  if (json && json.value) {
-    return json.value
-    .filter(o => o.visibility !== 'private') // Only public teams
-    .filter(o => {
+  while (url) {
+    const res = await fetch(url, {
+      method: 'GET',
+      headers,
+    });
+
+    if (!res.ok) {
+      console.error(`❌ Failed to fetch teams: ${res.status} ${res.statusText}`);
+      break;
+    }
+
+    const json = await res.json();
+    const teams = json.value || [];
+
+    // Filter as you go to reduce memory usage
+    for (const o of teams) {
       const name = o.displayName?.toLowerCase() || '';
       const desc = o.description?.toLowerCase() || '';
-      return name.includes(data.nameFilter.toLowerCase()) &&
-          desc.includes(data.descriptionFilter.toLowerCase());
-    })
-    .map(o => ({
-      id: o.id,
-      displayName: o.displayName,
-      description: o.description,
-    }));
+
+      const matches =
+        o.visibility !== 'private' &&
+        name.includes(nameFilterLower) &&
+        desc.includes(descFilterLower);
+
+      if (matches) {
+        results.push({
+          id: o.id,
+          displayName: o.displayName,
+          description: o.description,
+        });
+      }
+    }
+
+    url = json['@odata.nextLink'] || null;
   }
 
-  return null;
+  return results;
 };
 
 async function handleMessageStatsRequest(data, env) {
