@@ -672,6 +672,7 @@ async function addTeamMembers(data, env) {
 
   const uniqueUsers = Array.from(new Map(data.body.users.map(u => [u.email, u])).values());
   for (const user of uniqueUsers) {
+    const { displayName, email } = user;
     const userId = await ensureGuestUser({...data, email, displayName });
     let added = false;
 
