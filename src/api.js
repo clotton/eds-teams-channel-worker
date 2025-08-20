@@ -76,7 +76,7 @@ const getUserTeams = async (data) => {
 
 const getOwners = async (bearer) => {
   const params = new URLSearchParams({
-    '$filter': `startsWith(mail,'admin_')`,
+    '$filter': `startsWith(mail,'owner_')`,
     '$select': 'id,mail,displayName',
     '$count': 'true'
   });
@@ -126,21 +126,6 @@ const updateTeamPhoto = async (data) => {
 
     console.log('Photo updated', res.status, res.statusText);
   }
-};
-
-const updateRole = async (teamId, memberId, role, bearer) => {
-  const url = `https://graph.microsoft.com/v1.0/teams/${teamId}/members/${memberId}`;
-
-  const res = await fetch(url, {
-    method: 'PATCH',
-    headers: {
-      Authorization: `Bearer ${bearer}`,
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify({ roles: [role] }),
-  });
-
- console.log('Role updated ', res.status, res.statusText);
 };
 
 const addMembers = async (teamId, members, bearer) => {
@@ -238,7 +223,7 @@ const createTeam = async (data, env) => {
       return null;
     }
     // api accepts only 1 member...
-    owners.filter(o => o.email.startsWith('admin_ck')).forEach(o => {
+    owners.filter(o => o.email.startsWith('owner_ck')).forEach(o => {
       body.members.push({
         '@odata.type': '#microsoft.graph.aadUserConversationMember',
         roles:[
@@ -264,25 +249,21 @@ const createTeam = async (data, env) => {
     if (!ready) throw new Error('Team provisioning timeout');
     console.log('Team created', id);
 
-    // 3. update photo and rename channel
+    // 3. update photo
     await updateTeamPhoto({ bearer: data.bearer, body: { id } });
+
+    // 4. rename channel to 'Main' (if exists)
     const channels = await getChannels(id, data.bearer);
     const targetChannel = channels?.find(c => c.displayName?.toLowerCase() === 'general');
     if (targetChannel) await renameChannel(id, targetChannel.id, data.bearer);
 
-    // 4. add remaining owners
+    // 5. add remaining owners
     const remaining = owners
-    .filter(o => !o.email.startsWith('admin_ck'))
+    .filter(o => !o.email.startsWith('owner_ck'))
     .map(o => ({ id: o.id, role: 'owner' }));
-    await addMembers (id, remaining, data.bearer);
-    // if needed, verify and fix roles
-    const currentMembers = await getTeamMembers({ id, bearer: data.bearer });
-    for (const member of remaining) {
-      const existing = currentMembers.find(m => m.id === member.id && m.role !== 'owner');
-      if (existing) await updateRole(id, member.id, 'owner', data.bearer);
-    }
+    await addMembers(id, remaining, data.bearer);
 
-    // 5. add guests
+    // 6. add guests
     const teamMembers = (env.TEAM_GUESTS).split(',').map(e => e.trim()).filter(Boolean);
     const users = await Promise.all(teamMembers.map(email => getUser(email, data.bearer)));
     const validUsers = users.filter(Boolean).map(u => ({ id: u.id }));
@@ -293,11 +274,12 @@ const createTeam = async (data, env) => {
     }
     console.log(`Added guests:`, count);
 
-    // 6.  create the admin tag
+    // 7.  create the admin tag
     await createAdminTag(id, owners.map(o => o.id), data.bearer);
-    // 7. post admin and welcome message
 
-    // 8.  log team creation event
+    // 8. post admin and welcome message
+
+    // 9.  log team creation event
     await logEvent({
       text: `👤 *${createdBy}* created team *${name}* — ${count} guests added`
     }, env);
@@ -690,7 +672,6 @@ async function addTeamMembers(data, env) {
 
   const uniqueUsers = Array.from(new Map(data.body.users.map(u => [u.email, u])).values());
   for (const user of uniqueUsers) {
-    const { displayName, email } = user;
     const userId = await ensureGuestUser({...data, email, displayName });
     let added = false;
 
