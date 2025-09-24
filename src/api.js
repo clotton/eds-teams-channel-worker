@@ -128,32 +128,35 @@ const updateTeamPhoto = async (data) => {
   }
 };
 
-const addMembers = async (teamId, members, bearer) => {
-  const url = `https://graph.microsoft.com/v1.0/teams/${teamId}/members/add`;
-  const body = {
-    values:[]
-  };
+const addOwnersToTeam = async (teamId, owners, bearer) => {
 
-  members.forEach(member => {
-    const m = {
-      '@odata.type': 'microsoft.graph.aadUserConversationMember',
-      roles: [],
-      'user@odata.bind': `https://graph.microsoft.com/v1.0/users(\'${member.id}\')`
-    };
-    if (member.role) m.roles.push(member.role);
-    body.values.push(m);
-  });
+	for (const owner of owners) {
+		const url = `https://graph.microsoft.com/v1.0/groups/${teamId}/owners/$ref`;
 
-  const res = await fetch(url, {
-    method: 'POST',
-    headers: {
-      Authorization: `Bearer ${bearer}`,
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify(body),
-  });
+		const body = {
+			"@odata.id": `https://graph.microsoft.com/v1.0/directoryObjects/${owner.id}`
+		};
 
-  console.log('Add members response', res.status, res.statusText);
+		try {
+			const response = await fetch(url, {
+				method: "POST",
+				headers: {
+					Authorization: `Bearer ${bearer}`,
+					"Content-Type": "application/json"
+				},
+				body: JSON.stringify(body)
+			});
+
+			if (response.ok) {
+				console.log(`✅ Added owner ${owner} to team ${teamId}`);
+			} else {
+				const error = await response.json();
+				console.log(`❌ Failed to add owner ${owner}:`, error);
+			}
+		} catch (err) {
+			console.error("⚠️ Error adding owners:", err);
+		}
+	}
 };
 
 const getChannels = async (teamId, bearer) => {
@@ -261,7 +264,7 @@ const createTeam = async (data, env) => {
     const remaining = owners
     .filter(o => !o.email.startsWith('owner_ck'))
     .map(o => ({ id: o.id, role: 'owner' }));
-    await addMembers(id, remaining, data.bearer);
+    await addOwnersToTeam(id, remaining, data.bearer);
 
     // 6. add guests
     const teamMembers = (env.TEAM_GUESTS).split(',').map(e => e.trim()).filter(Boolean);
