@@ -201,7 +201,7 @@ const renameChannel = async (teamId, channelId, bearer) => {
 };
 
 const createTeam = async (data, env) => {
-  const { createdBy, name, description = '' } = data.body;
+  const { createdBy, name, teamType, description = '' } = data.body;
 
   if (name) {
     console.log('Creating team', name, description);
@@ -267,7 +267,7 @@ const createTeam = async (data, env) => {
     await addOwnersToTeam(id, remaining, data.bearer);
 
     // 6. add guests
-    const teamMembers = (env.TEAM_GUESTS).split(',').map(e => e.trim()).filter(Boolean);
+    const teamMembers = (teamType === 'EDS' ? env.EDS_GUESTS : env.LLMO_GUESTS).split(',').map(e => e.trim()).filter(Boolean);
     const users = await Promise.all(teamMembers.map(email => getUser(email, data.bearer)));
     const validUsers = users.filter(Boolean).map(u => ({ id: u.id }));
     let count = 0;
@@ -280,7 +280,17 @@ const createTeam = async (data, env) => {
     // 7.  create the admin tag
     await createAdminTag(id, owners.map(o => o.id), data.bearer);
 
-    // 8. post admin and welcome message
+    // 8. post admin tag message
+    const ckOwners = owners.filter(o => o.email.startsWith('owner_ck'));
+    if (ckOwners.length > 0 && targetChannel) {
+      await postMessageToChannel(
+        id,
+        targetChannel.id,
+        data.bearer,
+        "@admin Tag",
+        "Reach out to your administrators by mentioning @admin"
+      );
+    }
 
     // 9.  log team creation event
     await logEvent({
@@ -805,6 +815,42 @@ async function createAdminTag(teamId, userIds, token) {
     return data;
   } catch (err) {
     console.error("Error creating admin tag:", err);
+    return null;
+  }
+}
+
+async function postMessageToChannel(teamId, channelId, token, subject, message) {
+  const url = `https://graph.microsoft.com/v1.0/teams/${teamId}/channels/${channelId}/messages`;
+
+  const body = {
+    subject: subject,
+    body: {
+      contentType: "html",
+      content: message
+    }
+  };
+
+  try {
+    const res = await fetch(url, {
+      method: "POST",
+      headers: {
+        "Authorization": `Bearer ${token}`,
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify(body)
+    });
+
+    if (!res.ok) {
+      const errorText = await res.text();
+      console.error(`Failed to post message: ${res.status} - ${errorText}`);
+      return null;
+    }
+
+    const data = await res.json();
+    console.log("Message posted successfully");
+    return data;
+  } catch (err) {
+    console.error("Error posting message:", err);
     return null;
   }
 }
