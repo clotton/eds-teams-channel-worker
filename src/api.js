@@ -130,9 +130,21 @@ const updateTeamPhoto = async (data) => {
 
 const addOwnersToTeam = async (teamId, owners, bearer) => {
 
-	for (const owner of owners) {
-		const url = `https://graph.microsoft.com/v1.0/groups/${teamId}/owners/$ref`;
+    const results = [];
 
+	for (const owner of owners) {
+	    if (!owner?.id) {
+          console.warn(`⚠️ Skipping owner without id:`, owner);
+          results.push({
+            id: owner?.id,
+            email: owner?.email,
+            ok: false,
+            error: 'missing id'
+          });
+          continue;
+        }
+
+		const url = `https://graph.microsoft.com/v1.0/groups/${teamId}/owners/$ref`;
 		const body = {
 			"@odata.id": `https://graph.microsoft.com/v1.0/directoryObjects/${owner.id}`
 		};
@@ -148,15 +160,40 @@ const addOwnersToTeam = async (teamId, owners, bearer) => {
 			});
 
 			if (response.ok) {
-				console.log(`✅ Added owner ${owner} to team ${teamId}`);
+				console.log(`✅ Added owner ${owner.email || owner.id} to team ${teamId}`);
+          results.push({
+            id: owner.id,
+            email: owner.email,
+            ok: true
+          });
 			} else {
-				const error = await response.json();
-				console.log(`❌ Failed to add owner ${owner}:`, error);
+				  const error = await response.json().catch(() => ({}));
+				console.log(
+                          `❌ Failed to add owner ${owner.email || owner.id} to team ${teamId}:`,
+                          error
+                        );
+          results.push({
+            id: owner.id,
+            email: owner.email,
+            ok: false,
+            error
+          });
 			}
 		} catch (err) {
-			console.error("⚠️ Error adding owners:", err);
+		console.error(
+                `⚠️ Error adding owner ${owner.email || owner.id} to team ${teamId}:`,
+                err
+              );
+        results.push({
+          id: owner.id,
+          email: owner.email,
+          ok: false,
+          error: err.message || String(err)
+        });
 		}
 	}
+
+  return results;
 };
 
 const getChannels = async (teamId, bearer) => {
@@ -263,38 +300,53 @@ const createTeam = async (data, env) => {
     // 5. add remaining owners
     const remaining = owners
     .filter(o => !o.email.startsWith('owner_ck'))
-    .map(o => ({ id: o.id, role: 'owner' }));
-    await addOwnersToTeam(id, remaining, data.bearer);
+    .map(o => ({ id: o.id, email: o.email }));
+    const ownerAddResults = await addOwnersToTeam(id, remaining, data.bearer);
+
+    const failedOwners = ownerAddResults.filter(r => !r.ok);
+    const failedOwnerSummary = failedOwners.map(o =>
+      `${o.email || o.id} - ${typeof o.error === 'string'
+        ? o.error
+        : JSON.stringify(o.error).slice(0, 200)}`
+    ).join('\n');
 
     // 6. add guests
     const teamMembers = (teamType === 'EDS' ? env.EDS_GUESTS : env.LLMO_GUESTS).split(',').map(e => e.trim()).filter(Boolean);
     const users = await Promise.all(teamMembers.map(email => getUser(email, data.bearer)));
-    const validUsers = users.filter(Boolean).map(u => ({ id: u.id }));
+    const validUsers = users.filter(Boolean).map(u => ({ id: u.id, email: u.mail }));
+
+    const guestResults = [];
     let count = 0;
     for (const u of validUsers) {
-      const res = await addGuestToTeam({id, bearer: data.bearer, userId: u.id});
-      if (res.ok) count = count + 1;
+      const res = await addGuestToTeam({ id, bearer: data.bearer, userId: u.id });
+      const ok = res.ok || res.status === 204 || res.status === 400;
+      if (ok) count = count + 1;
+      guestResults.push({
+        email: u.email,
+        ok,
+        status: res.status,
+      });
     }
     console.log(`Added guests:`, count);
+
+    const failedGuests = guestResults.filter(g => !g.ok);
+    const failedGuestSummary = failedGuests
+      .map(g => `${g.email || 'unknown'} - HTTP ${g.status}`)
+      .join('\n');
 
     // 7.  create the admin tag
     await createAdminTag(id, owners.map(o => o.id), data.bearer);
 
-    // 8. post admin tag message
-    const ckOwners = owners.filter(o => o.email.startsWith('owner_ck'));
-    if (ckOwners.length > 0 && targetChannel) {
-      await postMessageToChannel(
-        id,
-        targetChannel.id,
-        data.bearer,
-        "@admin Tag",
-        "Reach out to your administrators by mentioning @admin"
-      );
-    }
-
-    // 9.  log team creation event
+    // 8.  log team creation event
     await logEvent({
-      text: `👤 *${createdBy}* created team *${name}* — ${count} guests added`
+      text:
+        `👤 *${createdBy}* created team *${name}* (type: *${teamType || 'N/A'}*) — ${count} guests added` +
+        (failedOwners.length
+          ? `\n⚠️ Failed to add ${failedOwners.length} owner(s):\n${failedOwnerSummary}`
+          : '') +
+        (failedGuests.length
+          ? `\n⚠️ Failed to add ${failedGuests.length} guest(s):\n${failedGuestSummary}`
+          : '')
     }, env);
 
     return {
@@ -815,42 +867,6 @@ async function createAdminTag(teamId, userIds, token) {
     return data;
   } catch (err) {
     console.error("Error creating admin tag:", err);
-    return null;
-  }
-}
-
-async function postMessageToChannel(teamId, channelId, token, subject, message) {
-  const url = `https://graph.microsoft.com/v1.0/teams/${teamId}/channels/${channelId}/messages`;
-
-  const body = {
-    subject: subject,
-    body: {
-      contentType: "html",
-      content: message
-    }
-  };
-
-  try {
-    const res = await fetch(url, {
-      method: "POST",
-      headers: {
-        "Authorization": `Bearer ${token}`,
-        "Content-Type": "application/json"
-      },
-      body: JSON.stringify(body)
-    });
-
-    if (!res.ok) {
-      const errorText = await res.text();
-      console.error(`Failed to post message: ${res.status} - ${errorText}`);
-      return null;
-    }
-
-    const data = await res.json();
-    console.log("Message posted successfully");
-    return data;
-  } catch (err) {
-    console.error("Error posting message:", err);
     return null;
   }
 }
