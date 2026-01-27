@@ -220,6 +220,35 @@ const addOwnersToTeam = async (teamId, owners, bearer) => {
   return results;
 };
 
+async function addOwnersWithProvisioningRetry(teamId, owners, bearer, attempts = 3, delayMs = 5000) {
+  let lastResults = [];
+
+  for (let i = 0; i < attempts; i++) {
+    const results = await addOwnersToTeam(teamId, owners, bearer);
+    lastResults = results;
+
+    const provisioningFailures = results.filter(r => {
+      const code = r?.error?.error?.code || r?.error?.code;
+      return code === 'Request_ResourceNotFound';
+    });
+
+    // If there are no provisioning-related failures, or everything succeeded/failed for other reasons,
+    // stop retrying and return what we have.
+    if (provisioningFailures.length === 0) {
+      return results;
+    }
+
+    if (i < attempts - 1) {
+      console.warn(
+        `Owner add encountered Request_ResourceNotFound for team ${teamId}; retrying in ${delayMs}ms (attempt ${i + 2}/${attempts})...`
+      );
+      await new Promise(r => setTimeout(r, delayMs));
+    }
+  }
+
+  return lastResults;
+}
+
 const getChannels = async (teamId, bearer) => {
   const headers = {
     Authorization: `Bearer ${bearer}`,
@@ -323,9 +352,10 @@ const createTeam = async (data, env) => {
 
     // 5. add remaining owners
     const remaining = owners
-    .filter(o => !o.email.startsWith('owner_ck'))
-    .map(o => ({ id: o.id, email: o.email }));
-    const ownerAddResults = await addOwnersToTeam(id, remaining, data.bearer);
+      .filter(o => !o.email.startsWith('owner_ck'))
+      .map(o => ({ id: o.id, email: o.email }));
+
+    const ownerAddResults = await addOwnersWithProvisioningRetry(id, remaining, data.bearer);
 
     const failedOwners = ownerAddResults.filter(r => !r.ok);
     const failedOwnerSummary = failedOwners.map(o =>
