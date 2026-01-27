@@ -110,21 +110,45 @@ const getOwners = async (bearer) => {
 
 const updateTeamPhoto = async (data) => {
   const { id } = data.body;
-  if (id) {
-    const headers = {
-      Authorization: `Bearer ${data.bearer}`,
-      'Content-Type': 'image/png',
-    };
-    const url = `https://graph.microsoft.com/v1.0/groups/${id}/photo/$value`;
-    console.log('Updating photo', url);
+  if (!id) {
+    return { ok: false, error: 'missing team id' };
+  }
 
-    const res = await fetch(url, {
-      method: 'PUT',
-      headers,
-      body: logo(),
-    });
+  const headers = {
+    Authorization: `Bearer ${data.bearer}`,
+    'Content-Type': 'image/png',
+  };
+  const url = `https://graph.microsoft.com/v1.0/groups/${id}/photo/$value`;
+  console.log('Updating photo', url);
+
+  try {
+    const res = await fetchWithRetry(
+      url,
+      {
+        method: 'PUT',
+        headers,
+        body: logo(),
+        // don't aggressively retry on 404s for photos
+        retry: false,
+      },
+      2,
+      2000,
+      15000,
+    );
 
     console.log('Photo updated', res.status, res.statusText);
+
+    if (res.status === 404) {
+      console.warn(
+        'Photo update returned 404. Team group may not have provisioned fully or photos are not supported for this group.',
+      );
+      return { ok: false, status: 404, reason: 'group may not have provisioned fully' };
+    }
+
+    return { ok: res.ok, status: res.status };
+  } catch (err) {
+    console.error('Error updating photo:', err);
+    return { ok: false, error: err.message || String(err) };
   }
 };
 
@@ -310,6 +334,11 @@ const createTeam = async (data, env) => {
         : JSON.stringify(o.error).slice(0, 200)}`
     ).join('\n');
 
+    const hasProvisioningOwnerError = failedOwners.some(o => {
+      const code = o?.error?.error?.code || o?.error?.code;
+      return code === 'Request_ResourceNotFound';
+    });
+
     // 6. add guests
     const teamMembers = (teamType === 'EDS' ? env.EDS_GUESTS : env.LLMO_GUESTS).split(',').map(e => e.trim()).filter(Boolean);
     const users = await Promise.all(teamMembers.map(email => getUser(email, data.bearer)));
@@ -342,7 +371,10 @@ const createTeam = async (data, env) => {
       text:
         `👤 *${createdBy}* created team *${name}* (type: *${teamType || 'N/A'}*) — ${count} guests added` +
         (failedOwners.length
-          ? `\n⚠️ Failed to add ${failedOwners.length} owner(s):\n${failedOwnerSummary}`
+          ? `\n⚠️ Failed to add ${failedOwners.length} owner(s):\n${failedOwnerSummary}` +
+            (hasProvisioningOwnerError
+              ? `\n_(Some owner adds may fail if the team group has not fully provisioned yet.)_`
+              : '')
           : '') +
         (failedGuests.length
           ? `\n⚠️ Failed to add ${failedGuests.length} guest(s):\n${failedGuestSummary}`
